@@ -1,0 +1,65 @@
+##########################################
+## DEXTER version 1.4 (August 20, 2011) ##
+##########################################
+
+All implementations created within the DEXTER project are open-source and 
+licensed under BSD. 
+
+
+Quick Start Guide:
+------------------
+* 0) Unittests MIT Benchmark
+  - cd <dexter>/src
+  - make unittest
+  - ./IXServer_unit
+
+* 1) Standard MIT Benchmark
+  - cd <dexter>/src
+  - make harness_test
+  - ./speed_test 1468 0 0 0 0 4000 16000
+
+* 2) Basic Functionality Test (insert, get, getNext, delete)
+  - cd <dexter>/src
+  - make tu
+  - ./IXServer_tu
+
+* 3) All the tests from above
+  - cd <dexter>/src
+  - make all 
+  - ./IXServer_tu
+  - ./IXServer_unit
+  - ./speed_test 1468 0 0 0 0 4000 16000
+
+* 4) Compile and run all the tests
+  - cd <dexter>/src
+  - make test 
+
+
+
+Additional Experiments:
+-----------------------
+* see <dexter>/src/exp and <dexter>/src/makefile for all 
+  experiments and compilation targets (includes experiments
+  for core indexing and in-memory query processing) 
+
+
+Configuration:
+--------------
+* All parameters can be configured in <dexter/src/IXStruct.h>
+* This includes for example (1) the amount of preallocated memory, (2) the
+  prefix length and related nodes sizes, as well as (3) many switches for
+  specific optimization techniques (e.g., compressed pointers, bypass 
+  jumper arrays etc)
+* By default most of the optimization techniques are turned off and we use
+  a well-balanced prefix length (w.r.t. data distributions, data types and
+  operations)
+
+
+Notes:
+------
+* In case of any problems with compilation, usage, or repeatability/workability 
+  of experiments, please do not hesitate to contact Matthias Boehm 
+  (matthias.boehm@tu-dresden.de).
+* The index server has been primarily tested on a 64bit Fedora 14  
+* However, in general the source code could be used for 32/64bit and different
+  operating systems
