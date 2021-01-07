@@ -1,16 +1,148 @@
-//
-// Created by lukas on 07.01.21.
-//
+/*
+Copyright (c) 2008 MIT
 
-#include "memdb_server.h"
-#include "server.h"
-#include <iostream>
-#include "MemDB.h"
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
 
-static MemDB db;
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 
+ server.h
+ written by Elizabeth Reid
+ ereid@mit.edu
 
+Version history:
+
+This is version 1.03, released January 16, 2009
+
+Main changes:
+
+- Clarified behavior when getNext is called after get returns
+  KEY_NOT_FOUND
+
+- Added a new structure, TxnState, that records information about the
+  current transaction.  This structure is passed into all API calls.
+
+- Required that transactions be able to span multiple indices.
+
+- Changed the Payload in the Record structure so it is a fixed size array, 
+  and clarified that the caller is responsible for allocating this structure
+
+- Changed get/getNext so that they take in only a Record, with the key
+  field populated to indicate what record is to be retrieved.
+ 
+- Clarified the return order of multiple records with duplicate keys when
+ get/getNext is called.
+
+Older versions:
+
+1.02, released December 16, 2008.
+      Further clarify key ordering, note that inserted payloads must be
+      copied.
+1.01 Released December 14, 2008
+       Clarify issues with key ordering
+1.0, Initial release, December 12, 2008.
+
+ 
+ */
+
+/* API that SIGMOD 2009 Contest participants must implement.
+   See http://db.csail.mit.edu/sigmod09contest/ for details
+*/
+
+#include <stdint.h>
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/**
+ Implementation-specific data stored in this variable, used to identify a thread's state
+ */
+typedef struct IdxState IdxState;
+
+/**
+ Implementation-specific data stored in this variable, used to identify a transaction across
+ Indices and store any information necessary for the implementation.
+ */
+typedef struct TxnState TxnState;
+
+/**
+ Specifies the maximum size for a payload.
+ */
+#define MAX_PAYLOAD_LEN 100
+
+/**
+ Specifies the maximum size for a varchar key.
+ */
+#define MAX_VARCHAR_LEN 128
+
+/**
+ Status messages for outcomes of API calls.
+ */
+typedef enum ErrCode
+    {
+        SUCCESS,
+        DB_DNE,
+        DB_EXISTS,
+        DB_END,
+        KEY_NOTFOUND,
+        TXN_EXISTS,
+        TXN_DNE,
+        ENTRY_EXISTS,
+        ENTRY_DNE,
+        DEADLOCK,
+        FAILURE
+    } ErrCode;
+
+/**
+ Three possible key types.
+ */
+typedef enum KeyType
+    {
+        SHORT,
+        INT,
+        VARCHAR
+    } KeyType;
+
+/**
+ Stores the key value, whether it is a short, an int or a varchar.
+ @type defines what kind of key it is
+ */
+typedef struct
+    {
+        KeyType type;
+        union {
+            int32_t shortkey;
+            int64_t intkey;
+            char charkey[MAX_VARCHAR_LEN + 1];
+        }keyval;
+    } Key;
+
+/**
+ The record information stored in an index
+ @value key: The lookup key for the record.
+ @value payload: The value stored under that key. It will be a 
+ null-terminated C string of no more than 128 bytes.
+ */
+typedef struct
+    {
+        Key key;
+        char payload[MAX_PAYLOAD_LEN + 1];
+    } Record;
 
 
 /**
@@ -23,9 +155,7 @@ static MemDB db;
  DB_EXISTS if index with specified name already exists.
  FAILURE if could not create index for some other reason.
  */
-ErrCode create(KeyType type, char *name) {
-    return db.create(type, name);
-}
+ErrCode create(KeyType type, char *name);
 
 /**
  Drops an existing index.
@@ -35,9 +165,7 @@ ErrCode create(KeyType type, char *name) {
  SUCCESS if successfully dropped index.
  FAILURE index doesn't exist or some other reason.
  */
-ErrCode drop(char *name) {
-    return db.drop(name);
-}
+ErrCode drop(char *name);
 
 /**
  Opens a specific index data structure to be used by this thread.
@@ -49,9 +177,7 @@ ErrCode drop(char *name) {
  DB_DNE if the name given does not have an associated DB that has been create()d.
  FAILURE if DB exists but could not be opened for some other reason.
  */
-ErrCode openIndex(const char *name, IdxState **idxState) {
-    return db.openIndex(name, idxState);
-}
+ErrCode openIndex(const char *name, IdxState **idxState);
 
 /**
  Terminate use of current index by this thread.
@@ -62,9 +188,7 @@ ErrCode openIndex(const char *name, IdxState **idxState) {
  DB_DNE is the DB never existed or was already closed by someone else.
  FAILURE if could not close DB for some other reason.
  **/
-ErrCode closeIndex(IdxState *idxState) {
-    return db.closeIndex(idxState);
-}
+ErrCode closeIndex(IdxState *idxState);
 
 /**
  Signals the beginning of a transaction.  Each thread can have only
@@ -77,9 +201,7 @@ ErrCode closeIndex(IdxState *idxState) {
  DEADLOCK if this transaction had to be aborted because of deadlock.
  FAILURE if could not begin transaction for some other reason.
  */
-ErrCode beginTransaction(TxnState **txn) {
-    return SUCCESS;
-}
+ErrCode beginTransaction(TxnState **txn);
 
 /**
  Forces the current transaction to abort, rolling back all changes
@@ -92,9 +214,7 @@ ErrCode beginTransaction(TxnState **txn) {
  DEADLOCK if the abort failed because of deadlock.
  FAILURE if could not abort transaction for some other reason.
  */
-ErrCode abortTransaction(TxnState *txn) {
-    return SUCCESS;
-}
+ErrCode abortTransaction(TxnState *txn);
 
 /**
  Signals the end of the current transaction, committing
@@ -107,9 +227,7 @@ ErrCode abortTransaction(TxnState *txn) {
  DEADLOCK if this transaction could not be closed because of deadlock.
  FAILURE if could not end transaction for some other reason.
  */
-ErrCode commitTransaction(TxnState *txn) {
-    return SUCCESS;
-}
+ErrCode commitTransaction(TxnState *txn);
 
 /**
  Retrieve the first record associated with the given key value; if
@@ -117,26 +235,24 @@ ErrCode commitTransaction(TxnState *txn) {
  with this key. Contents of the retrieved record are copied into
  the user supplied Record structure.
 
- Records with the same key may be returned in any order, but it must
- be that if there are n records with the same key k, a call to get
+ Records with the same key may be returned in any order, but it must 
+ be that if there are n records with the same key k, a call to get 
  followed by n-1 calls to getNext will return all n records with key k.
 
  If get returns KEY_NOTFOUND for a key k, the caller may invoke getNext
  to find the first key after key k.
-
+ 
  @param idxState The state variable for this thread
  @param txn The transaction state to be used (or NULL if not in a transaction)
- @param record Record containing the key being retrieved, into which the
+ @param record Record containing the key being retrieved, into which the 
  payload is copied.
- @return ErrCode
- SUCCESS if successfully retrieved and returned unique record.
- KEY_NOTFOUND if specified key value was not found in the DB.
- DEADLOCK if this call could not complete because of deadlock.
+ @return ErrCode 
+ SUCCESS if successfully retrieved and returned unique record. 
+ KEY_NOTFOUND if specified key value was not found in the DB.  
+ DEADLOCK if this call could not complete because of deadlock. 
  FAILURE if could not retrieve unique record for some other reason.
  */
-ErrCode get(IdxState *idxState, TxnState *txn, Record *record) {
-    return SUCCESS;
-}
+ErrCode get(IdxState *idxState, TxnState *txn, Record *record);
 
 /**
  Retrieve the record following the previous record retrieved by get or
@@ -144,17 +260,17 @@ ErrCode get(IdxState *idxState, TxnState *txn, Record *record) {
  began, or if this is called from outside of a transaction, this
  returns the first record in the index. Records are ordered in ascending
  order by key.  Records with the same key but different payloads
- may be returned in any order.
+ may be returned in any order. 
 
  If get returned KEY_NOT_FOUND for a key k, invoking getNext will
  return the first key after k.
-
- If the index is closed and reopened, or a new transaction has begun
- since any previous call of get or getNext, getNext returns the first
+ 
+ If the index is closed and reopened, or a new transaction has begun 
+ since any previous call of get or getNext, getNext returns the first 
  record in the index.
+ 
 
-
- @param idxState The state variable for the index whose next Record
+ @param idxState The state variable for the index whose next Record 
  is to be returned
  @param txn The transaction state to be used (or NULL if not in a transaction)
  @param record Record through which the next key/payload pair is returned
@@ -164,9 +280,7 @@ ErrCode get(IdxState *idxState, TxnState *txn, Record *record) {
  DEADLOCK if this call could not complete because of deadlock.
  FAILURE if could not retrieve next record for some other reason.
  */
-ErrCode getNext(IdxState *idxState, TxnState *txn, Record *record) {
-    return SUCCESS;
-}
+ErrCode getNext(IdxState *idxState, TxnState *txn, Record *record);
 
 /**
  Insert a payload associated with the given key. An identical key can
@@ -174,7 +288,7 @@ ErrCode getNext(IdxState *idxState, TxnState *txn, Record *record) {
  called from outside of a transaction, it should commit immediately.
  Records in an index are ordered in ascending order by key.  Records
  with the same key may be stored in any order.
-
+ 
  The implementation is responsible for making a copy of payload
  (e.g., it may not assume that the payload pointer continues
  to be valid after this routine returns.)
@@ -189,9 +303,7 @@ ErrCode getNext(IdxState *idxState, TxnState *txn, Record *record) {
  DEADLOCK if this call could not complete because of deadlock.
  FAILURE if could not insert entry for some other reason.
  */
-ErrCode insertRecord(IdxState *idxState, TxnState *txn, Key *k, const char* payload) {
-    return SUCCESS;
-}
+ErrCode insertRecord(IdxState *idxState, TxnState *txn, Key *k, const char* payload);
 
 /**
  Remove the record associated with the given key from the index
@@ -203,7 +315,7 @@ ErrCode insertRecord(IdxState *idxState, TxnState *txn, Key *k, const char* payl
 
  @param idxState The state variable for this thread
  @param txn The transaction state to be used (or NULL if not in a transaction)
- @param record Record struct containing a Key and a char* payload
+ @param record Record struct containing a Key and a char* payload 
  (or NULL pointer) describing what is to be deleted
  @return ErrCode
  SUCCESS if successfully deleted record from DB.
@@ -212,6 +324,8 @@ ErrCode insertRecord(IdxState *idxState, TxnState *txn, Key *k, const char* payl
  DEADLOCK if this call could not complete because of deadlock.
  FAILURE if could not delete record for some other reason.
  */
-ErrCode deleteRecord(IdxState *idxState, TxnState *txn, Record *record) {
-    return SUCCESS;
+ErrCode deleteRecord(IdxState *idxState, TxnState *txn, Record *record);
+
+#ifdef __cplusplus
 }
+#endif
