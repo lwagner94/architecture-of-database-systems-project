@@ -1,4 +1,8 @@
-mod server;
+
+pub fn foobar() -> String {
+    String::from("foobar")
+}
+
 
 #[cfg(test)]
 mod tests {
