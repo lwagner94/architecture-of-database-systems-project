@@ -4,7 +4,7 @@ project(architecture_of_database_systems_project)
 
 add_executable(speed_test reference/driver/speed_test.c)
 
-add_library(memdb STATIC src/memdb_server.cpp src/L0Tree.cpp src/L0Tree.h src/MemDB.cpp src/MemDB.h src/types.h)
+add_library(memdb STATIC src/memdb_server.cpp src/Tree.cpp src/Tree.h src/MemDB.cpp src/MemDB.h src/types.h src/L2Item.cpp src/L2Item.h src/L1Item.cpp src/L1Item.h src/L0Item.cpp src/L0Item.h)
 target_compile_features(memdb PRIVATE cxx_std_17)
 
 

@@ -5,5 +5,9 @@
 #pragma once
 
 struct IdxState {
-    std::shared_ptr<L0Tree> l0Tree;
+    std::shared_ptr<Tree> tree;
+};
+
+struct TxnState {
+
 };
