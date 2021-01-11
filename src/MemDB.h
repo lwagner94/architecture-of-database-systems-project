@@ -208,5 +208,5 @@ private:
 
     std::vector<int> transactionIds;
 
-    int transactionIDCounter;
+    uint32_t transactionIDCounter;
 };

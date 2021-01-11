@@ -9,8 +9,10 @@
 #include <vector>
 #include <shared_mutex>
 #include <stdint.h>
+#include <memory>
 
 #include "server.h"
+#include "L0Item.h"
 #include "L2Item.h"
 #include "L1Item.h"
 #include "Transaction.h"
@@ -47,19 +49,19 @@ public:
     void commit(int transactionId);
     void abort(int transactionId);
 
-    static uint32_t calculateIndex(char* data, uint32_t level);
+    static uint32_t calculateIndex(const uint8_t* data, uint32_t level);
 
-    static void int32ToCharArray(char* data, int32_t number);
-    static void int64ToCharArray(char* data, int64_t number);
+    static void int32ToByteArray(uint8_t* data, int32_t number);
+    static void int64ToByteArray(uint8_t* data, int64_t number);
 
-    static int32_t charArrayToInt32(const char* data);
-    static int64_t charArrayToInt64(const char* data);
+    static int32_t charArrayToInt32(const uint8_t* data);
+    static int64_t charArrayToInt64(const uint8_t* data);
 
-    static void padVarchar(char* dest, const char* src);
+    static void varcharToByteArray(uint8_t* dest, const uint8_t* src);
 private:
 
     std::map<int, std::vector<TransactionLogItem>> transactionLogItems;
-    std::map<Key, L1Item, KeyCompare> keyMap;
+    L0Item* rootElement;
     std::shared_mutex mutex;
 };
 

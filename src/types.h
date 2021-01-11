@@ -10,5 +10,5 @@ struct IdxState {
 };
 
 struct TxnState {
-    int transactionId;
+    uint32_t transactionId;
 };

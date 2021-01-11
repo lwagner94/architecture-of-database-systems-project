@@ -7,6 +7,9 @@
 #include "server.h"
 
 struct TransactionLogItem {
-    Record record;
+
+    L1Item* l1Item;
+    std::string payload;
+
     bool created;
 };

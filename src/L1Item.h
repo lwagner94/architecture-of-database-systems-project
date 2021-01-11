@@ -10,7 +10,11 @@
 #include <list>
 
 struct L1Item {
-    Key key;
+    explicit L1Item(uint8_t* keyData): keyData(keyData), items({}) {
+
+    }
+
+    uint8_t* keyData;
     std::vector<L2Item> items;
 };
 
