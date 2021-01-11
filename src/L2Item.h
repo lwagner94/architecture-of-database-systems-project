@@ -4,7 +4,11 @@
 
 #pragma once
 
-class L2Item {
+#include <vector>
+#include <string>
 
+struct L2Item {
+    std::string payload;
+    int readTimestamp;
+    int writeTimestamp;
 };
-

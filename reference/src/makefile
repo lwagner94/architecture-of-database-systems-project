@@ -15,6 +15,7 @@ DRIVER_PHANTOM = $(DRIVERDIR)/phantom_test.c
 DRIVER_VHB = $(DRIVERDIR)/vary_high.c
 DRIVER_VLB = $(DRIVERDIR)/vary_low.c
 DRIVER_BENCHMARK = $(DRIVERDIR)/speed_test.c
+DRIVER_CUSTOM = $(DRIVERDIR)/Custom.c
 
 INCLUDE   = -I. -I$(INCDIR)
 DSYS      = BSD42
@@ -25,6 +26,9 @@ LDFLAGS= -lpthread -Wl,--no-relax
 MINFLAGS = -O3 -mmmx -fPIC -lpthread -combine
 MAXFLAGS_UBUNTU = -O3 -fPIC -lpthread
 MAXFLAGS = -O3 -fPIC -lpthread -combine
+
+custom: $(HEADERS) IXServer.c $(DRIVER_CUSTOM)
+	$(COMPILER) $(MAXFLAGS_UBUNTU) $(INCLUDE) $(DRIVER_CUSTOM) $(SRC) -o custom $(LDFLAGS)
 
 tu: $(HEADERS) IXServer.c 
 	$(COMPILER) $(MAXFLAGS_UBUNTU) $(INCLUDE) $(DRIVER_TU) $(SRC) -o IXServer_tu $(LDFLAGS)
@@ -65,4 +69,4 @@ test: all
 
 clean:
 	- rm -f *.o *.so *.dyn XServer_* *.gcno *.gcda *.results *.exe
-	- rm IXServer_unit IXServer_tu speed_test
+	- rm IXServer_unit IXServer_tu speed_test custom

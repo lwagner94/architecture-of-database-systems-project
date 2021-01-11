@@ -5,9 +5,10 @@
 #pragma once
 
 struct IdxState {
+    MemDB* memDbInstance;
     std::shared_ptr<Tree> tree;
 };
 
 struct TxnState {
-
+    int transactionId;
 };

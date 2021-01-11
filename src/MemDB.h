@@ -196,11 +196,17 @@ public:
      */
     ErrCode deleteRecord(IdxState *idxState, TxnState *txn, Record *record);
 
-private:
     int getTransactionID();
+
+    bool isTransactionActive(int transactionId);
+
+private:
+
 
     std::map<std::string, std::shared_ptr<Tree>> index_dict;
     std::shared_mutex mtx;
+
+    std::vector<int> transactionIds;
 
     int transactionIDCounter;
 };

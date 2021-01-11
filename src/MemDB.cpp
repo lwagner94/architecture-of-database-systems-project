@@ -2,8 +2,11 @@
 // Created by lukas on 07.01.21.
 //
 
+#include <algorithm>
+
 #include "MemDB.h"
 #include "types.h"
+
 
 MemDB::MemDB() = default;
 
@@ -52,37 +55,78 @@ ErrCode MemDB::closeIndex(IdxState *idxState) {
 }
 
 ErrCode MemDB::deleteRecord(IdxState *idxState, TxnState *txn, Record *record) {
-    return DB_END;
+    auto tree = idxState->tree;
+    return tree->deleteRecord(this, txn, record);
 }
 
 ErrCode MemDB::insertRecord(IdxState *idxState, TxnState *txn, Key *k, const char *payload) {
     auto tree = idxState->tree;
-    return tree->insertRecord(txn, k, payload);
+    return tree->insertRecord(this, txn, k, payload);
 }
 
 ErrCode MemDB::getNext(IdxState *idxState, TxnState *txn, Record *record) {
-    return DB_END;
+    return SUCCESS;
 }
 
 ErrCode MemDB::get(IdxState *idxState, TxnState *txn, Record *record) {
     auto tree = idxState->tree;
-    return tree->get(txn, record);
+    return tree->get(this, txn, record);
 }
 
 ErrCode MemDB::commitTransaction(TxnState *txn) {
-    return DB_END;
+    std::lock_guard<std::shared_mutex> l(this->mtx);
+    auto it = std::find(this->transactionIds.begin(), this->transactionIds.end(), txn->transactionId);
+
+    if (it != this->transactionIds.end()) {
+        this->transactionIds.erase(it);
+    }
+
+    for (auto& s : this->index_dict) {
+        s.second->commit(txn->transactionId);
+    }
+
+    delete txn;
+
+    return SUCCESS;
 }
 
 ErrCode MemDB::abortTransaction(TxnState *txn) {
-    return DB_END;
+    std::lock_guard<std::shared_mutex> l(this->mtx);
+    auto it = std::find(this->transactionIds.begin(), this->transactionIds.end(), txn->transactionId);
+
+    if (it != this->transactionIds.end()) {
+        this->transactionIds.erase(it);
+    }
+
+    for (auto& s : this->index_dict) {
+        s.second->abort(txn->transactionId);
+    }
+
+    delete txn;
+    return SUCCESS;
 }
 
 ErrCode MemDB::beginTransaction(TxnState **txn) {
     auto state = new TxnState;
+    {
+        std::lock_guard<std::shared_mutex> l(this->mtx);
 
+        int transactionId = this->getTransactionID();
+        this->transactionIds.push_back(transactionId);
+        state->transactionId = transactionId;
+    }
     *txn = state;
+    return SUCCESS;
 }
 
 int MemDB::getTransactionID() {
     return __sync_fetch_and_add(&this->transactionIDCounter, 1);
+}
+
+bool MemDB::isTransactionActive(int transactionId) {
+    if (std::find(this->transactionIds.cbegin(), this->transactionIds.cend(), transactionId) == this->transactionIds.cend()) {
+        return false;
+    }
+
+    return true;
 }

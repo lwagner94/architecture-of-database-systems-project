@@ -78,7 +78,7 @@ ErrCode closeIndex(IdxState *idxState) {
  FAILURE if could not begin transaction for some other reason.
  */
 ErrCode beginTransaction(TxnState **txn) {
-    return SUCCESS;
+    return db.beginTransaction(txn);
 }
 
 /**
@@ -93,7 +93,7 @@ ErrCode beginTransaction(TxnState **txn) {
  FAILURE if could not abort transaction for some other reason.
  */
 ErrCode abortTransaction(TxnState *txn) {
-    return SUCCESS;
+    return db.abortTransaction(txn);
 }
 
 /**
@@ -108,7 +108,7 @@ ErrCode abortTransaction(TxnState *txn) {
  FAILURE if could not end transaction for some other reason.
  */
 ErrCode commitTransaction(TxnState *txn) {
-    return SUCCESS;
+    return db.commitTransaction(txn);
 }
 
 /**
@@ -135,7 +135,7 @@ ErrCode commitTransaction(TxnState *txn) {
  FAILURE if could not retrieve unique record for some other reason.
  */
 ErrCode get(IdxState *idxState, TxnState *txn, Record *record) {
-    return SUCCESS;
+    return db.get(idxState, txn, record);
 }
 
 /**
@@ -165,7 +165,7 @@ ErrCode get(IdxState *idxState, TxnState *txn, Record *record) {
  FAILURE if could not retrieve next record for some other reason.
  */
 ErrCode getNext(IdxState *idxState, TxnState *txn, Record *record) {
-    return SUCCESS;
+    return db.getNext(idxState, txn, record);
 }
 
 /**
@@ -190,7 +190,7 @@ ErrCode getNext(IdxState *idxState, TxnState *txn, Record *record) {
  FAILURE if could not insert entry for some other reason.
  */
 ErrCode insertRecord(IdxState *idxState, TxnState *txn, Key *k, const char* payload) {
-    return SUCCESS;
+    return db.insertRecord(idxState, txn, k, payload);
 }
 
 /**
@@ -213,5 +213,5 @@ ErrCode insertRecord(IdxState *idxState, TxnState *txn, Key *k, const char* payl
  FAILURE if could not delete record for some other reason.
  */
 ErrCode deleteRecord(IdxState *idxState, TxnState *txn, Record *record) {
-    return SUCCESS;
+    return db.deleteRecord(idxState, txn, record);
 }
