@@ -8,13 +8,15 @@
 
 #include <vector>
 #include <list>
+#include "types.h"
 
 struct L1Item {
-    explicit L1Item(uint8_t* keyData): keyData(keyData), items({}) {
+    explicit L1Item(std::array<uint8_t, max_size()> keyData): keyData(keyData), items({}) {
 
     }
 
-    uint8_t* keyData;
+//    uint8_t* keyData;
+    std::array<uint8_t, max_size()> keyData {};
     std::vector<L2Item> items;
 };
 

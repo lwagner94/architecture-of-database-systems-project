@@ -12,20 +12,9 @@
 #include "MemDB.h"
 #include "types.h"
 #include "Transaction.h"
+#include "bitutils.h"
 
-constexpr size_t PREFIX_LENGTH = 4;
 
-constexpr size_t SIZES[] = {
-        [KeyType::SHORT] = 4,
-        [KeyType::INT] = 8,
-        [KeyType::VARCHAR] = MAX_VARCHAR_LEN
-};
-
-constexpr size_t LEVELS[] = {
-        [KeyType::SHORT] = SIZES[KeyType::SHORT] * 8 / PREFIX_LENGTH,
-        [KeyType::INT] = SIZES[KeyType::INT] * 8 / PREFIX_LENGTH,
-        [KeyType::VARCHAR] =  SIZES[KeyType::VARCHAR] * 8 / PREFIX_LENGTH,
-};
 
 static inline uint32_t getTransactionId(TxnState *txn, MemDB* db) {
     if (!txn) {
@@ -36,43 +25,35 @@ static inline uint32_t getTransactionId(TxnState *txn, MemDB* db) {
     }
 }
 
-Tree::Tree(KeyType keyType) : keyType(keyType), rootElement(new L0Item) {
+Tree::Tree(KeyType keyType) : keyType(keyType), rootElement(new L0Item), jumperArray({}) {
 
 }
 
 ErrCode Tree::get(MemDB* db, TxnState *txn, Record *record) {
-    std::shared_lock lock(this->mutex);
-
+//    std::shared_lock lock(this->mutex);
+    std::lock_guard lock(this->mutex);
     auto transactionId = getTransactionId(txn, db);
 
-    // TODO: std::array?
-    auto keyData = std::vector<uint8_t>(SIZES[this->keyType]);
+    std::array<uint8_t, max_size()> keyData {};
     auto k = &record->key;
 
     switch (this->keyType) {
         case KeyType::SHORT:
-            Tree::int32ToByteArray(keyData.data(), k->keyval.shortkey);
+            int32ToByteArray(keyData.data(), k->keyval.shortkey);
             break;
         case KeyType::INT:
-            Tree::int64ToByteArray(keyData.data(), k->keyval.intkey);
+            int64ToByteArray(keyData.data(), k->keyval.intkey);
             break;
         case KeyType::VARCHAR:
-            Tree::varcharToByteArray(keyData.data(), (uint8_t *) k->keyval.charkey);
+            varcharToByteArray(keyData.data(), (uint8_t *) k->keyval.charkey);
             break;
         default:
             return FAILURE;
     }
 
-    L0Item* currentL0Item = this->rootElement;
-
-    for (size_t level = 0; level < LEVELS[this->keyType]; level++) {
-        uint32_t index = Tree::calculateIndex(keyData.data(), level);
-
-        if (!currentL0Item->children[index]) {
-            return KEY_NOTFOUND;
-        }
-
-        currentL0Item = currentL0Item->children[index];
+    L0Item* currentL0Item = this->findL0Item(keyData.data());
+    if (!currentL0Item) {
+        return KEY_NOTFOUND;
     }
 
     for (const auto& l2Item : currentL0Item->l1Item->items) {
@@ -80,7 +61,7 @@ ErrCode Tree::get(MemDB* db, TxnState *txn, Record *record) {
         // TODO: Refactor!
         if (((l2Item.writeTimestamp < transactionId) && !db->isTransactionActive(l2Item.writeTimestamp)) || l2Item.writeTimestamp == transactionId) {
             auto& payload = l2Item.payload;
-            assert(payload.length() <= MAX_PAYLOAD_LEN);
+//            assert(payload.length() <= MAX_PAYLOAD_LEN);
             payload.copy(record->payload, payload.length());
             record->payload[payload.length()] = 0;
             return SUCCESS;
@@ -94,18 +75,17 @@ ErrCode Tree::insertRecord(MemDB* db, TxnState *txn, Key *k, const char *payload
     std::lock_guard lock(this->mutex);
 
     auto transactionId = getTransactionId(txn, db);
-
-    auto keyData = new uint8_t[SIZES[this->keyType]];
+    std::array<uint8_t, max_size()> keyData {};
 
     switch (this->keyType) {
         case KeyType::SHORT:
-            Tree::int32ToByteArray(keyData, k->keyval.shortkey);
+            int32ToByteArray(keyData.data(), k->keyval.shortkey);
             break;
         case KeyType::INT:
-            Tree::int64ToByteArray(keyData, k->keyval.intkey);
+            int64ToByteArray(keyData.data(), k->keyval.intkey);
             break;
         case KeyType::VARCHAR:
-            Tree::varcharToByteArray(keyData, (uint8_t *) k->keyval.charkey);
+            varcharToByteArray(keyData.data(), (uint8_t *) k->keyval.charkey);
             break;
         default:
             return FAILURE;
@@ -113,14 +93,19 @@ ErrCode Tree::insertRecord(MemDB* db, TxnState *txn, Key *k, const char *payload
 
     L0Item* currentL0Item = this->rootElement;
 
-    for (size_t level = 0; level < LEVELS[this->keyType]; level++) {
-        uint32_t index = Tree::calculateIndex(keyData, level);
+    for (size_t level = 0; level < LEVELS[this->keyType] / 2; level++) {
+        auto indices = calculateNextTwoIndices(keyData.data(), level);
 
-        if (!currentL0Item->children[index]) {
-            currentL0Item->children[index] = new L0Item;
+        if (!currentL0Item->children[indices.first]) {
+            currentL0Item->children[indices.first] = new L0Item;
+        }
+        currentL0Item = currentL0Item->children[indices.first];
+
+        if (!currentL0Item->children[indices.second]) {
+            currentL0Item->children[indices.second] = new L0Item;
         }
 
-        currentL0Item = currentL0Item->children[index];
+        currentL0Item = currentL0Item->children[indices.second];
     }
 
     if (!currentL0Item->l1Item) {
@@ -137,15 +122,15 @@ ErrCode Tree::insertRecord(MemDB* db, TxnState *txn, Key *k, const char *payload
 
 
     if (txn) {
-        TransactionLogItem log {currentL0Item->l1Item, payload, true};
-        auto it = this->transactionLogItems.find(transactionId);
-
-        if (it == this->transactionLogItems.end()) {
-            this->transactionLogItems.emplace(std::make_pair(transactionId, std::vector {log}));
-        }
-        else {
-            it->second.push_back(log);
-        }
+//        TransactionLogItem log {currentL0Item->l1Item, payload, true};
+//        auto it = this->transactionLogItems.find(transactionId);
+//
+//        if (it == this->transactionLogItems.end()) {
+//            this->transactionLogItems.emplace(std::make_pair(transactionId, std::vector {log}));
+//        }
+//        else {
+//            it->second.push_back(log);
+//        }
     }
 
 
@@ -157,34 +142,26 @@ ErrCode Tree::deleteRecord(MemDB* db, TxnState *txn, Record *record) {
 
     auto transactionId = getTransactionId(txn, db);
 
-    // TODO: std::array?
-    auto keyData = std::vector<uint8_t>(SIZES[this->keyType]);
+    std::array<uint8_t, max_size()> keyData {};
     auto k = &record->key;
 
     switch (this->keyType) {
         case KeyType::SHORT:
-            Tree::int32ToByteArray(keyData.data(), k->keyval.shortkey);
+            int32ToByteArray(keyData.data(), k->keyval.shortkey);
             break;
         case KeyType::INT:
-            Tree::int64ToByteArray(keyData.data(), k->keyval.intkey);
+            int64ToByteArray(keyData.data(), k->keyval.intkey);
             break;
         case KeyType::VARCHAR:
-            Tree::varcharToByteArray(keyData.data(), (uint8_t *) k->keyval.charkey);
+            varcharToByteArray(keyData.data(), (uint8_t *) k->keyval.charkey);
             break;
         default:
             return FAILURE;
     }
 
-    L0Item* currentL0Item = this->rootElement;
-
-    for (size_t level = 0; level < LEVELS[this->keyType]; level++) {
-        uint32_t index = Tree::calculateIndex(keyData.data(), level);
-
-        if (!currentL0Item->children[index]) {
-            return KEY_NOTFOUND;
-        }
-
-        currentL0Item = currentL0Item->children[index];
+    L0Item* currentL0Item = this->findL0Item(keyData.data());
+    if (!currentL0Item) {
+        return KEY_NOTFOUND;
     }
 
     if (strnlen(record->payload, MAX_PAYLOAD_LEN) == 0) {
@@ -248,32 +225,31 @@ uint32_t Tree::calculateIndex(const uint8_t* data, uint32_t level) {
     return nibble;
 }
 
-void Tree::int32ToByteArray(uint8_t * data, int32_t number) {
-    uint32_t temp = __builtin_bswap32(number);
-    *reinterpret_cast<uint32_t*>(data) = temp;
+L0Item* Tree::findL0Item(const uint8_t *data) {
+    L0Item* currentL0Item = this->rootElement;
+
+    for (size_t level = 0; level < LEVELS[this->keyType] / 2; level++) {
+        auto indices = calculateNextTwoIndices(data, level);
+
+        if (!currentL0Item->children[indices.first]) {
+            return nullptr;
+        }
+        currentL0Item = currentL0Item->children[indices.first];
+
+        if (!currentL0Item->children[indices.second]) {
+            return nullptr;
+        }
+
+        currentL0Item = currentL0Item->children[indices.second];
+    }
+
+    return currentL0Item;
 }
 
-void Tree::int64ToByteArray(uint8_t* data, int64_t number) {
-    uint64_t temp = __builtin_bswap64(number);
-    *reinterpret_cast<uint64_t*>(data) = temp;
-}
-
-int32_t Tree::charArrayToInt32(const uint8_t *data) {
-    uint32_t temp = *reinterpret_cast<const uint32_t*>(data);
-    return (int32_t) __builtin_bswap32(temp);
-}
-
-int64_t Tree::charArrayToInt64(const uint8_t *data) {
-    uint64_t temp = *reinterpret_cast<const uint64_t*>(data);
-    return (int64_t) __builtin_bswap64(temp);
-}
 
 
-void Tree::varcharToByteArray(uint8_t* dest, const uint8_t* src) {
-    // TODO: Feed this externally?
-    size_t len = strnlen((char*) src, MAX_VARCHAR_LEN);
-    size_t offset = MAX_VARCHAR_LEN - len;
 
-    memcpy(dest + offset, src, len);
-    memset(dest, 0, offset);
-}
+
+
+
+

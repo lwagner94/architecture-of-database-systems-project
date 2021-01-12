@@ -1,10 +1,14 @@
 cmake_minimum_required(VERSION 3.17)
+
+
+
 project(architecture_of_database_systems_project)
 
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
-
+set(CMAKE_C_COMPILER gcc)
+set(CMAKE_CXX_COMPILER g++)
 
 add_executable(speed_test reference/driver/speed_test.c)
 add_executable(unit_test reference/driver/unittests.c)
@@ -12,7 +16,7 @@ add_executable(unit_test reference/driver/unittests.c)
 
 
 
-add_library(memdb STATIC src/memdb_server.cpp src/Tree.cpp src/Tree.h src/MemDB.cpp src/MemDB.h src/types.h src/L2Item.h src/L1Item.h src/L0Item.h src/Transaction.h)
+add_library(memdb STATIC src/memdb_server.cpp src/Tree.cpp src/Tree.h src/MemDB.cpp src/MemDB.h src/types.h src/L2Item.h src/L1Item.h src/L0Item.h src/Transaction.h src/Spinlock.h src/bitutils.h)
 target_compile_features(memdb PRIVATE cxx_std_17)
 
 
