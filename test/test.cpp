@@ -233,14 +233,14 @@ TEST_CASE( "Varchar padding", "" ) {
 
 
     SECTION("normal string") {
-        varcharToByteArray(dest.data(), (uint8_t *) "foo");
+        REQUIRE(varcharToByteArray(dest.data(), (uint8_t *) "foo") == 125);
         REQUIRE(memcmp(dest.data() + (MAX_VARCHAR_LEN - 3), "foo", 3) == 0);
     }
 
     SECTION("max length string") {
         // Length: 128
         const uint8_t* s = (uint8_t*) "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-        varcharToByteArray(dest.data(), s);
+        REQUIRE(varcharToByteArray(dest.data(), s) == 0);
         REQUIRE(memcmp(dest.data(), s, 128) == 0);
     }
 
@@ -248,7 +248,7 @@ TEST_CASE( "Varchar padding", "" ) {
         // Length: 125
         const uint8_t * s = (uint8_t*) "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
-        varcharToByteArray(dest.data(), s);
+        REQUIRE(varcharToByteArray(dest.data(), s) == 3);
 
         REQUIRE(dest[0] == 0);
         REQUIRE(dest[1] == 0);
@@ -295,3 +295,37 @@ TEST_CASE( "calculateNextTwoIndices", "" ) {
     }
 }
 
+TEST_CASE( "jumpList tests", "[jumplist]" ) {
+    MemDB db;
+    REQUIRE(db.create(VARCHAR, (char*) "hello") == SUCCESS);
+    IdxState* state = nullptr;
+    REQUIRE(db.openIndex("hello", &state) == SUCCESS);
+
+    Key k;
+    k.type = VARCHAR;
+
+    SECTION("single insert") {
+        memset(k.keyval.charkey, 0, 129);
+        REQUIRE(db.insertRecord(state, nullptr, &k, "payload") == SUCCESS);
+        Record r;
+        r.key = k;
+        REQUIRE(db.get(state, nullptr, &r) == SUCCESS);
+
+        REQUIRE("payload" == std::string(r.payload));
+    }
+
+//    SECTION("multiple insert") {
+//        REQUIRE(db.insertRecord(state, nullptr, &k, "payload") == SUCCESS);
+//        REQUIRE(db.insertRecord(state, nullptr, &k, "payload") == ENTRY_EXISTS);
+//        REQUIRE(db.insertRecord(state, nullptr, &k, "payload2") == SUCCESS);
+//        Record r;
+//        r.key = k;
+//        REQUIRE(db.get(state, nullptr, &r) == SUCCESS);
+//
+//        REQUIRE("payload" == std::string(r.payload));
+//    }
+
+    REQUIRE(db.closeIndex(state) == SUCCESS);
+    REQUIRE(db.drop((char*) "hello") == SUCCESS);
+
+}

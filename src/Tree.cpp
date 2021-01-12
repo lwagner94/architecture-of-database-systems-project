@@ -10,7 +10,7 @@
 
 #include <assert.h>
 #include "MemDB.h"
-#include "types.h"
+
 #include "Transaction.h"
 #include "bitutils.h"
 
@@ -26,7 +26,17 @@ static inline uint32_t getTransactionId(TxnState *txn, MemDB* db) {
 }
 
 Tree::Tree(KeyType keyType) : keyType(keyType), rootElement(new L0Item), jumperArray({}) {
+    this->jumperArray[0] = this->rootElement;
+    L0Item* current = this->rootElement;
 
+    if (keyType == KeyType::VARCHAR) {
+        for (size_t level = 1; level < LEVELS[this->keyType]; level++) {
+            auto newL0Item = new L0Item;
+            current->children[0] = newL0Item;
+            current = newL0Item;
+            this->jumperArray[level] = newL0Item;
+        }
+    }
 }
 
 ErrCode Tree::get(MemDB* db, TxnState *txn, Record *record) {
@@ -36,6 +46,7 @@ ErrCode Tree::get(MemDB* db, TxnState *txn, Record *record) {
 
     std::array<uint8_t, max_size()> keyData {};
     auto k = &record->key;
+    size_t leadingZeros = 0;
 
     switch (this->keyType) {
         case KeyType::SHORT:
@@ -45,14 +56,14 @@ ErrCode Tree::get(MemDB* db, TxnState *txn, Record *record) {
             int64ToByteArray(keyData.data(), k->keyval.intkey);
             break;
         case KeyType::VARCHAR:
-            varcharToByteArray(keyData.data(), (uint8_t *) k->keyval.charkey);
+            leadingZeros = varcharToByteArray(keyData.data(), (uint8_t *) k->keyval.charkey);
             break;
         default:
             return FAILURE;
     }
 
-    L0Item* currentL0Item = this->findL0Item(keyData.data());
-    if (!currentL0Item) {
+    L0Item* currentL0Item = this->findL0Item(keyData.data(), leadingZeros);
+    if (!currentL0Item || !currentL0Item->l1Item) {
         return KEY_NOTFOUND;
     }
 
@@ -77,6 +88,8 @@ ErrCode Tree::insertRecord(MemDB* db, TxnState *txn, Key *k, const char *payload
     auto transactionId = getTransactionId(txn, db);
     std::array<uint8_t, max_size()> keyData {};
 
+    size_t leadingZeros = 0;
+
     switch (this->keyType) {
         case KeyType::SHORT:
             int32ToByteArray(keyData.data(), k->keyval.shortkey);
@@ -85,7 +98,7 @@ ErrCode Tree::insertRecord(MemDB* db, TxnState *txn, Key *k, const char *payload
             int64ToByteArray(keyData.data(), k->keyval.intkey);
             break;
         case KeyType::VARCHAR:
-            varcharToByteArray(keyData.data(), (uint8_t *) k->keyval.charkey);
+            leadingZeros = varcharToByteArray(keyData.data(), (uint8_t *) k->keyval.charkey);
             break;
         default:
             return FAILURE;
@@ -93,7 +106,15 @@ ErrCode Tree::insertRecord(MemDB* db, TxnState *txn, Key *k, const char *payload
 
     L0Item* currentL0Item = this->rootElement;
 
-    for (size_t level = 0; level < LEVELS[this->keyType] / 2; level++) {
+    size_t level = 0;
+
+    if (leadingZeros) {
+        level = leadingZeros;
+        currentL0Item = this->jumperArray[leadingZeros * 2 - 1];
+    }
+
+
+    for (; level < LEVELS[this->keyType] / 2; level++) {
         auto indices = calculateNextTwoIndices(keyData.data(), level);
 
         if (!currentL0Item->children[indices.first]) {
@@ -159,7 +180,8 @@ ErrCode Tree::deleteRecord(MemDB* db, TxnState *txn, Record *record) {
             return FAILURE;
     }
 
-    L0Item* currentL0Item = this->findL0Item(keyData.data());
+    // TODO
+    L0Item* currentL0Item = this->findL0Item(keyData.data(), 0);
     if (!currentL0Item) {
         return KEY_NOTFOUND;
     }
@@ -225,10 +247,17 @@ uint32_t Tree::calculateIndex(const uint8_t* data, uint32_t level) {
     return nibble;
 }
 
-L0Item* Tree::findL0Item(const uint8_t *data) {
+L0Item* Tree::findL0Item(const uint8_t *data, size_t leadingZeros) {
     L0Item* currentL0Item = this->rootElement;
 
-    for (size_t level = 0; level < LEVELS[this->keyType] / 2; level++) {
+    size_t level = 0;
+
+    if (leadingZeros) {
+        level = leadingZeros;
+        currentL0Item = this->jumperArray[leadingZeros * 2 - 1];
+    }
+
+    for (; level < LEVELS[this->keyType] / 2; level++) {
         auto indices = calculateNextTwoIndices(data, level);
 
         if (!currentL0Item->children[indices.first]) {

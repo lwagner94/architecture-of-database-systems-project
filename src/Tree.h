@@ -18,7 +18,7 @@
 #include "L2Item.h"
 #include "L1Item.h"
 #include "Transaction.h"
-
+#include "types.h"
 class MemDB;
 
 class Tree{
@@ -34,7 +34,7 @@ public:
     void commit(int transactionId);
     void abort(int transactionId);
 
-    L0Item* findL0Item(const uint8_t* data);
+    L0Item* findL0Item(const uint8_t* data, size_t leadingZeros);
 
     static uint32_t calculateIndex(const uint8_t* data, uint32_t level);
 private:
@@ -43,7 +43,10 @@ private:
     L0Item* rootElement;
     std::shared_mutex mutex;
 
-    std::array<L0Item*, MAX_VARCHAR_LEN> jumperArray;
+    std::array<L0Item*, LEVELS[KeyType::VARCHAR]> jumperArray;
+
+//    std::vector<L0Item> l0Items;
+//    size_t rootElementOffset;
 
 //    SpinLock mutex;
 };

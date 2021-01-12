@@ -36,11 +36,12 @@ inline int64_t charArrayToInt64(const uint8_t *data) {
 }
 
 
-inline void varcharToByteArray(uint8_t* dest, const uint8_t* src) {
+inline size_t varcharToByteArray(uint8_t* dest, const uint8_t* src) {
     // TODO: Feed this externally?
     size_t len = strnlen((char*) src, MAX_VARCHAR_LEN);
     size_t offset = MAX_VARCHAR_LEN - len;
 
     memcpy(dest + offset, src, len);
 //    memset(dest, 0, offset);
+    return offset;
 }
