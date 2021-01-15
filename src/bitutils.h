@@ -4,17 +4,6 @@
 
 #pragma once
 
-
-
-inline std::pair<uint8_t, uint8_t> calculateNextTwoIndices(const uint8_t* data, uint32_t level_div_by_two) {
-    uint8_t byte = *(data + level_div_by_two);
-
-    uint8_t first_index = (byte >> 4);
-    uint8_t second_index = byte & 0xF;
-
-    return std::make_pair(first_index, second_index);
-}
-
 inline void int32ToByteArray(uint8_t * data, int32_t number) {
     uint32_t temp = __builtin_bswap32(number);
     *reinterpret_cast<uint32_t*>(data) = temp;
@@ -45,3 +34,46 @@ inline size_t varcharToByteArray(uint8_t* dest, const uint8_t* src) {
 //    memset(dest, 0, offset);
     return offset;
 }
+
+inline std::pair<uint8_t, uint8_t> calculateNextTwoIndices(const uint8_t* data, uint32_t level_div_by_two) {
+    uint8_t byte = *(data + level_div_by_two);
+
+    uint8_t first_index = (byte >> 4);
+    uint8_t second_index = byte & 0xF;
+
+    return std::make_pair(first_index, second_index);
+}
+
+inline void prepareKeyData(const Key* k, uint8_t* dest) {
+    switch (k->type) {
+        case KeyType::SHORT:
+            int32ToByteArray(dest, k->keyval.shortkey);
+            break;
+        case KeyType::INT:
+            int64ToByteArray(dest, k->keyval.intkey);
+            break;
+        case KeyType::VARCHAR:
+            varcharToByteArray(dest, (uint8_t *) k->keyval.charkey);
+            break;
+        default:
+            return;
+    }
+}
+
+//uint32_t Tree::calculateIndex(const uint8_t* data, uint32_t level) {
+//    // Assuming prefix length = 4
+//
+//    uint8_t byte = *(data + level / 2);
+//    uint8_t nibble = 0;
+//
+//    if (level % 2 == 0) {
+//        nibble = (byte >> 4) & 0xF;
+//    }
+//    else {
+//        nibble = byte & 0xF;
+//    }
+//
+//    return nibble;
+//}
+
+

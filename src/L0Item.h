@@ -6,12 +6,16 @@
 
 #include <array>
 #include "L1Item.h"
+#include "types.h"
+
+
 
 struct L0Item {
-    L0Item() : children({}), l1Item(nullptr){
+    L0Item() : children(), l1Item(NO_CHILD){
+        children.fill(NO_CHILD);
     }
 
-    std::array<L0Item*, 16> children;
-    L1Item* l1Item;
+    std::array<offset, 16> children;
+    offset l1Item;
 };
 

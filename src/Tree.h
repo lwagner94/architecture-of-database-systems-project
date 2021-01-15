@@ -21,6 +21,8 @@
 #include "types.h"
 class MemDB;
 
+
+
 class Tree{
 public:
     KeyType keyType;
@@ -28,26 +30,38 @@ public:
     explicit Tree(KeyType keyType);
 
     ErrCode get(MemDB* db, TxnState *txn, Record *record);
+    ErrCode getNext(MemDB* db, TxnState *txn, Record *record);
     ErrCode insertRecord(MemDB* db, TxnState *txn, Key *k, const char* payload);
     ErrCode deleteRecord(MemDB* db, TxnState *txn, Record *record);
 
     void commit(int transactionId);
     void abort(int transactionId);
-
-    L0Item* findL0Item(const uint8_t* data, size_t leadingZeros);
-
-    static uint32_t calculateIndex(const uint8_t* data, uint32_t level);
+    void visit(TxnState* txn);
 private:
+    offset findOrConstructL1Item(const std::array<uint8_t, max_size()>& keyData);
+    offset findL1ItemWithSmallestKey();
+    offset findL1Item(const uint8_t* data, TxnState* txn);
 
     std::map<int, std::vector<TransactionLogItem>> transactionLogItems;
-    L0Item* rootElement;
-    std::shared_mutex mutex;
+    std::mutex mutex;
 
-    std::array<L0Item*, LEVELS[KeyType::VARCHAR]> jumperArray;
+    std::vector<L0Item> l0Items;
+    std::vector<L1Item> l1Items;
+    offset rootElementOffset;
 
-//    std::vector<L0Item> l0Items;
-//    size_t rootElementOffset;
+    L0Item& accessL0Item(offset i) {
+        return l0Items[i];
+//        return l0Items.at(i);
+    }
+
+    L1Item& accessL1Item(offset i) {
+        return l1Items[i];
+//        return l1Items.at(i);
+    }
 
 //    SpinLock mutex;
+
+
+    offset recursive(TxnState *txn, uint32_t level, L0Item* l0Item, uint32_t* indexUpdate);
 };
 

@@ -7,8 +7,7 @@
 #include "server.h"
 
 struct TransactionLogItem {
-
-    L1Item* l1Item;
+    offset l1Offset;
     std::string payload;
 
     bool created;

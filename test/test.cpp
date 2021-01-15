@@ -29,7 +29,7 @@ TEST_CASE( "Basic open/close tests", "[create]" ) {
 
 }
 
-TEST_CASE( "Basic insert/get tests", "[create]" ) {
+TEST_CASE( "Basic insert/get tests", "[foo]" ) {
     MemDB db;
     REQUIRE(db.create(INT, (char*) "hello") == SUCCESS);
     IdxState* state = nullptr;
@@ -257,19 +257,6 @@ TEST_CASE( "Varchar padding", "" ) {
     }
 }
 
-TEST_CASE( "Tree::calculateIndex", "" ) {
-    SECTION("trivial") {
-        uint8_t data[4] = {0xAB, 0xCD, 0x12, 0x34};
-        REQUIRE(Tree::calculateIndex(data, 0) == 0xA);
-        REQUIRE(Tree::calculateIndex(data, 1) == 0xB);
-        REQUIRE(Tree::calculateIndex(data, 2) == 0xC);
-        REQUIRE(Tree::calculateIndex(data, 3) == 0xD);
-        REQUIRE(Tree::calculateIndex(data, 4) == 0x1);
-        REQUIRE(Tree::calculateIndex(data, 5) == 0x2);
-        REQUIRE(Tree::calculateIndex(data, 6) == 0x3);
-        REQUIRE(Tree::calculateIndex(data, 7) == 0x4);
-    }
-}
 
 TEST_CASE( "calculateNextTwoIndices", "" ) {
     SECTION("trivial") {
@@ -314,18 +301,182 @@ TEST_CASE( "jumpList tests", "[jumplist]" ) {
         REQUIRE("payload" == std::string(r.payload));
     }
 
-//    SECTION("multiple insert") {
-//        REQUIRE(db.insertRecord(state, nullptr, &k, "payload") == SUCCESS);
-//        REQUIRE(db.insertRecord(state, nullptr, &k, "payload") == ENTRY_EXISTS);
-//        REQUIRE(db.insertRecord(state, nullptr, &k, "payload2") == SUCCESS);
-//        Record r;
-//        r.key = k;
-//        REQUIRE(db.get(state, nullptr, &r) == SUCCESS);
-//
-//        REQUIRE("payload" == std::string(r.payload));
-//    }
+    SECTION("multiple insert") {
+        REQUIRE(db.insertRecord(state, nullptr, &k, "payload") == SUCCESS);
+        REQUIRE(db.insertRecord(state, nullptr, &k, "payload") == ENTRY_EXISTS);
+        REQUIRE(db.insertRecord(state, nullptr, &k, "payload2") == SUCCESS);
+        Record r;
+        r.key = k;
+        REQUIRE(db.get(state, nullptr, &r) == SUCCESS);
+
+        REQUIRE("payload" == std::string(r.payload));
+    }
 
     REQUIRE(db.closeIndex(state) == SUCCESS);
     REQUIRE(db.drop((char*) "hello") == SUCCESS);
 
+}
+
+TEST_CASE( "Basic getNext tests", "[foo]" ) {
+    MemDB db;
+    REQUIRE(db.create(VARCHAR, (char*) "hello") == SUCCESS);
+    IdxState* state = nullptr;
+    REQUIRE(db.openIndex("hello", &state) == SUCCESS);
+
+    Key k;
+    k.type = VARCHAR;
+    strcpy(k.keyval.charkey, "foo");
+    SECTION("single insert, then getNext without txn") {
+        REQUIRE(db.insertRecord(state, nullptr, &k, "payload") == SUCCESS);
+        Record r;
+        REQUIRE(db.getNext(state, nullptr, &r) == SUCCESS);
+        REQUIRE("payload" == std::string(r.payload));
+
+        REQUIRE(r.key.type == VARCHAR);
+        REQUIRE(strcmp(r.key.keyval.charkey, "foo") == 0);
+    }
+
+    SECTION("two inserts with same key, getNext without txn should return first insert") {
+        REQUIRE(db.insertRecord(state, nullptr, &k, "payload") == SUCCESS);
+        REQUIRE(db.insertRecord(state, nullptr, &k, "payload2") == SUCCESS);
+        Record r;
+        REQUIRE(db.getNext(state, nullptr, &r) == SUCCESS);
+        REQUIRE("payload" == std::string(r.payload));
+        REQUIRE(r.key.type == VARCHAR);
+        REQUIRE(strcmp(r.key.keyval.charkey, "foo") == 0);
+    }
+
+    SECTION("two inserts with different keys, getNext without txn should return smallest key") {
+        REQUIRE(db.insertRecord(state, nullptr, &k, "payload") == SUCCESS);
+        strcpy(k.keyval.charkey, "eoo");
+        REQUIRE(db.insertRecord(state, nullptr, &k, "payload2") == SUCCESS);
+        Record r;
+        REQUIRE(db.getNext(state, nullptr, &r) == SUCCESS);
+        REQUIRE("payload2" == std::string(r.payload));
+        REQUIRE(r.key.type == VARCHAR);
+        REQUIRE(strcmp(r.key.keyval.charkey, "eoo") == 0);
+    }
+    REQUIRE(db.closeIndex(state) == SUCCESS);
+    REQUIRE(db.drop((char*) "hello") == SUCCESS);
+}
+
+TEST_CASE( "Transaction getNext tests", "[foo]" ) {
+    MemDB db;
+    REQUIRE(db.create(INT, (char*) "hello") == SUCCESS);
+    IdxState* state = nullptr;
+    REQUIRE(db.openIndex("hello", &state) == SUCCESS);
+
+    Key k;
+    k.type = INT;
+    k.keyval.intkey = 0;
+    REQUIRE(db.insertRecord(state, nullptr, &k, "payload1") == SUCCESS);
+    REQUIRE(db.insertRecord(state, nullptr, &k, "payload2") == SUCCESS);
+
+    k.keyval.intkey = 1;
+    REQUIRE(db.insertRecord(state, nullptr, &k, "payload3") == SUCCESS);
+    REQUIRE(db.insertRecord(state, nullptr, &k, "payload4") == SUCCESS);
+
+    k.keyval.intkey = 15465467;
+    REQUIRE(db.insertRecord(state, nullptr, &k, "payload5") == SUCCESS);
+
+    k.keyval.intkey = 154655467;
+    REQUIRE(db.insertRecord(state, nullptr, &k, "payload6") == SUCCESS);
+
+    TxnState* txn = nullptr;
+    REQUIRE(db.beginTransaction(&txn) == SUCCESS);
+
+    Record r;
+    SECTION("first getNext, with txn") {
+
+        REQUIRE(db.getNext(state, txn, &r) == SUCCESS);
+
+        REQUIRE(r.key.type == INT);
+        REQUIRE(r.key.keyval.intkey == 0);
+        REQUIRE("payload1" == std::string(r.payload));
+    }
+
+    SECTION("second getNext, with txn") {
+        REQUIRE(db.getNext(state, txn, &r) == SUCCESS);
+        REQUIRE(db.getNext(state, txn, &r) == SUCCESS);
+
+        REQUIRE(r.key.type == INT);
+        REQUIRE(r.key.keyval.intkey == 0);
+        REQUIRE("payload2" == std::string(r.payload));
+    }
+
+    SECTION("third getNext, with txn") {
+        REQUIRE(db.getNext(state, txn, &r) == SUCCESS);
+        REQUIRE(db.getNext(state, txn, &r) == SUCCESS);
+        REQUIRE(db.getNext(state, txn, &r) == SUCCESS);
+
+        REQUIRE(r.key.type == INT);
+        REQUIRE(r.key.keyval.intkey == 1);
+        REQUIRE("payload3" == std::string(r.payload));
+    }
+
+    SECTION("getNext after get, with valid key, with txn") {
+        r.key.type = INT;
+        r.key.keyval.intkey = 0;
+        REQUIRE(db.get(state, txn, &r) == SUCCESS);
+        REQUIRE("payload1" == std::string(r.payload));
+        REQUIRE(db.getNext(state, txn, &r) == SUCCESS);
+
+//        REQUIRE("payload1" == std::string(r.payload));
+
+        REQUIRE(r.key.type == INT);
+        REQUIRE(r.key.keyval.intkey == 0);
+        REQUIRE("payload2" == std::string(r.payload));
+    }
+
+    REQUIRE(db.commitTransaction(txn) == SUCCESS);
+    REQUIRE(db.closeIndex(state) == SUCCESS);
+    REQUIRE(db.drop((char*) "hello") == SUCCESS);
+}
+
+TEST_CASE( "get -> KEY_NOTFOUND and then getNext tests", "[foo]" ) {
+    MemDB db;
+    REQUIRE(db.create(INT, (char*) "hello") == SUCCESS);
+    IdxState* state = nullptr;
+    REQUIRE(db.openIndex("hello", &state) == SUCCESS);
+
+    Key k;
+    k.type = INT;
+    k.keyval.intkey = 1337;
+    REQUIRE(db.insertRecord(state, nullptr, &k, "payload3") == SUCCESS);
+    REQUIRE(db.insertRecord(state, nullptr, &k, "payload4") == SUCCESS);
+
+
+    TxnState* txn = nullptr;
+
+    REQUIRE(db.beginTransaction(&txn) == SUCCESS);
+
+    Record r;
+    SECTION("first getNext, with txn") {
+        r.key.keyval.intkey = 0;
+        r.key.type = INT;
+        REQUIRE(db.get(state, txn, &r) == KEY_NOTFOUND);
+        REQUIRE(db.getNext(state, txn, &r) == SUCCESS);
+
+        REQUIRE(r.key.type == INT);
+        REQUIRE(r.key.keyval.intkey == 1337);
+        REQUIRE("payload3" == std::string(r.payload));
+    }
+
+    SECTION("first getNext, with txn") {
+        r.key.keyval.intkey = 1337;
+        r.key.type = INT;
+        REQUIRE(db.get(state, txn, &r) == SUCCESS);
+        REQUIRE(db.deleteRecord(state, txn, &r) == SUCCESS);
+
+        REQUIRE(db.getNext(state, txn, &r) == SUCCESS);
+
+        REQUIRE(r.key.type == INT);
+        REQUIRE(r.key.keyval.intkey == 1337);
+        REQUIRE("payload3" == std::string(r.payload));
+    }
+
+
+    REQUIRE(db.commitTransaction(txn) == SUCCESS);
+    REQUIRE(db.closeIndex(state) == SUCCESS);
+    REQUIRE(db.drop((char*) "hello") == SUCCESS);
 }

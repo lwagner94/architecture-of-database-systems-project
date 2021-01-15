@@ -65,7 +65,8 @@ ErrCode MemDB::insertRecord(IdxState *idxState, TxnState *txn, Key *k, const cha
 }
 
 ErrCode MemDB::getNext(IdxState *idxState, TxnState *txn, Record *record) {
-    return SUCCESS;
+    auto tree = idxState->tree;
+    return tree->getNext(this, txn, record);
 }
 
 ErrCode MemDB::get(IdxState *idxState, TxnState *txn, Record *record) {
@@ -88,6 +89,7 @@ ErrCode MemDB::commitTransaction(TxnState *txn) {
     delete txn;
 
     return SUCCESS;
+    return SUCCESS;
 }
 
 ErrCode MemDB::abortTransaction(TxnState *txn) {
@@ -104,16 +106,19 @@ ErrCode MemDB::abortTransaction(TxnState *txn) {
 
     delete txn;
     return SUCCESS;
+    return SUCCESS;
 }
 
 ErrCode MemDB::beginTransaction(TxnState **txn) {
-    auto state = new TxnState;
+    TxnState* state;
     {
         std::lock_guard<std::shared_mutex> l(this->mtx);
 
+        // TODO: Data type!
         int transactionId = this->getTransactionID();
         this->transactionIds.push_back(transactionId);
-        state->transactionId = transactionId;
+
+        state = new TxnState(transactionId);
     }
     *txn = state;
     return SUCCESS;
@@ -124,6 +129,7 @@ int MemDB::getTransactionID() {
 }
 
 bool MemDB::isTransactionActive(int transactionId) {
+//    std::shared_lock<std::shared_mutex> l(this->mtx);
     if (std::find(this->transactionIds.cbegin(), this->transactionIds.cend(), transactionId) == this->transactionIds.cend()) {
         return false;
     }
