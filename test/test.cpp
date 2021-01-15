@@ -140,19 +140,19 @@ TEST_CASE( "Basic transaction tests", "[create]" ) {
 
         REQUIRE(db.get(state, nullptr, &r) == SUCCESS);
     }
-//    SECTION("trivial abort") {
-//        REQUIRE(db.beginTransaction(&txn) == SUCCESS);
-//
-//        REQUIRE(db.insertRecord(state, txn, &k, "payload") == SUCCESS);
-//
-//        Record r;
-//        r.key = k;
-//        REQUIRE(db.get(state, txn, &r) == SUCCESS);
-//
-//        REQUIRE(db.abortTransaction(txn) == SUCCESS);
-//
-//        REQUIRE(db.get(state, nullptr, &r) == KEY_NOTFOUND);
-//    }
+    SECTION("trivial abort") {
+        REQUIRE(db.beginTransaction(&txn) == SUCCESS);
+
+        REQUIRE(db.insertRecord(state, txn, &k, "payload") == SUCCESS);
+
+        Record r;
+        r.key = k;
+        REQUIRE(db.get(state, txn, &r) == SUCCESS);
+
+        REQUIRE(db.abortTransaction(txn) == SUCCESS);
+
+        REQUIRE(db.get(state, nullptr, &r) == KEY_NOTFOUND);
+    }
 
     REQUIRE(db.closeIndex(state) == SUCCESS);
     REQUIRE(db.drop((char*) "hello") == SUCCESS);
@@ -472,7 +472,7 @@ TEST_CASE( "get -> KEY_NOTFOUND and then getNext tests", "[foo]" ) {
 
         REQUIRE(r.key.type == INT);
         REQUIRE(r.key.keyval.intkey == 1337);
-        REQUIRE("payload3" == std::string(r.payload));
+        REQUIRE("payload4" == std::string(r.payload));
     }
 
 

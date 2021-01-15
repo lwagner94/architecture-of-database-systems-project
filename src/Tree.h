@@ -34,8 +34,8 @@ public:
     ErrCode insertRecord(MemDB* db, TxnState *txn, Key *k, const char* payload);
     ErrCode deleteRecord(MemDB* db, TxnState *txn, Record *record);
 
-    void commit(int transactionId);
-    void abort(int transactionId);
+    void commit(uint32_t transactionId);
+    void abort(uint32_t transactionId);
     void visit(TxnState* txn);
 private:
     offset findOrConstructL1Item(const std::array<uint8_t, max_size()>& keyData);
@@ -47,6 +47,7 @@ private:
 
     std::vector<L0Item> l0Items;
     std::vector<L1Item> l1Items;
+    std::vector<uint32_t> activeTransactionIDs;
     offset rootElementOffset;
 
     L0Item& accessL0Item(offset i) {
@@ -63,5 +64,11 @@ private:
 
 
     offset recursive(TxnState *txn, uint32_t level, L0Item* l0Item, uint32_t* indexUpdate);
+
+    void removeTransaction(uint32_t transactionId);
+
+    bool isTransactionActive(uint32_t transactionID);
+
+    uint32_t getTransactionId(TxnState *txn, MemDB *db);
 };
 

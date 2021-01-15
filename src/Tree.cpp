@@ -16,11 +16,17 @@
 
 
 
-static inline uint32_t getTransactionId(TxnState *txn, MemDB* db) {
+uint32_t Tree::getTransactionId(TxnState *txn, MemDB* db) {
     if (!txn) {
         return db->getTransactionID();
     }
     else {
+        if (std::find(activeTransactionIDs.begin(),
+                      activeTransactionIDs.end(),
+                      txn->transactionId) == activeTransactionIDs.end()) {
+            activeTransactionIDs.push_back(txn->transactionId);
+        }
+
         return txn->transactionId;
     }
 }
@@ -44,22 +50,25 @@ ErrCode Tree::get(MemDB* db, TxnState *txn, Record *record) {
         return KEY_NOTFOUND;
     }
     auto l1Item = &accessL1Item(l1Offset);
-
-    for (uint32_t l2Index = 0; l2Index < l1Item->items.size(); l2Index++) {
-        const auto& l2Item = l1Item->items[l2Index];
+    for (auto l2Item = l1Item->items.begin(); l2Item != std::end(l1Item->items); l2Item++) {
 
         // TODO: Refactor!
-        if (((l2Item.writeTimestamp < transactionId) && !db->isTransactionActive(l2Item.writeTimestamp)) || l2Item.writeTimestamp == transactionId) {
-            auto& payload = l2Item.payload;
+        if (((l2Item->writeTimestamp < transactionId) && !isTransactionActive(l2Item->writeTimestamp)) || l2Item->writeTimestamp == transactionId) {
+            auto& payload = l2Item->payload;
 //            assert(payload.length() <= MAX_PAYLOAD_LEN);
             payload.copy(record->payload, payload.length());
             record->payload[payload.length()] = 0;
 
             if (txn) {
-                txn->l2Size = l1Item->items.size();
-                txn->l2Index = l2Index + 1;
-                txn->l1Offset = l1Offset;
                 txn->firstCall = false;
+                txn->l2Iterator = ++l2Item;
+                if (txn->l2Iterator == std::end(l1Item->items)) {
+                    txn->hasMoreL2Items = false;
+                }
+                else {
+                    txn->hasMoreL2Items = true;
+                }
+                txn->l1Offset = l1Offset;
             }
 
             return SUCCESS;
@@ -69,78 +78,110 @@ ErrCode Tree::get(MemDB* db, TxnState *txn, Record *record) {
     return KEY_NOTFOUND;
 }
 
+bool Tree::isTransactionActive(uint32_t transactionID) {
+    return std::find(activeTransactionIDs.begin(), activeTransactionIDs.end(), transactionID) != activeTransactionIDs.end();
+}
+
 ErrCode Tree::getNext(MemDB *db, TxnState *txn, Record *record) {
     std::lock_guard lock(this->mutex);
     auto transactionId = getTransactionId(txn, db);
 
-    uint32_t l2Index = 0;
+    while (true) {
+        offset l1Offset;
 
-    offset l1Offset;
-    if (!txn) {
-        l1Offset = findL1ItemWithSmallestKey();
+        std::list<L2Item>::iterator l2Item {};
 
-    }
-    else if (txn->firstCall) {
-        uint32_t _ = 0;
-        l1Offset = recursive(txn, 0, &accessL0Item(rootElementOffset), &_);
-        txn->firstCall = false;
-    }
-    else if (txn->l2Index < txn->l2Size) {
-        l1Offset = txn->l1Offset;
-        l2Index = txn->l2Index;
-    }
-    else {
-        uint32_t _ = 0;
-        l1Offset = recursive(txn, 0, &accessL0Item(rootElementOffset), &_);
-    }
+        if (!txn) {
+            l1Offset = findL1ItemWithSmallestKey();
 
-    if (!hasChild(l1Offset)) {
-        return DB_END;
-    }
+        }
+        else if (txn->firstCall) {
+            uint32_t _ = 0;
+            l1Offset = recursive(txn, 0, &accessL0Item(rootElementOffset), &_);
+            if (_) {
+                return DB_END;
+            }
+            txn->firstCall = false;
+        }
+        else if (txn->hasMoreL2Items) {
+            l1Offset = txn->l1Offset;
+        }
+        else {
+            uint32_t _ = 0;
+            l1Offset = recursive(txn, 0, &accessL0Item(rootElementOffset), &_);
+            if (_) {
+                return DB_END;
+            }
+        }
 
-    auto l1Item = &accessL1Item(l1Offset);
+        if (!hasChild(l1Offset)) {
+            return DB_END;
+        }
 
-    for (; l2Index < l1Item->items.size(); l2Index++) {
-        const auto& l2Item = l1Item->items[l2Index];
+        auto l1Item = &accessL1Item(l1Offset);
 
-        // TODO: Refactor!
-        if (((l2Item.writeTimestamp < transactionId) && !db->isTransactionActive(l2Item.writeTimestamp)) || l2Item.writeTimestamp == transactionId) {
-            auto& payload = l2Item.payload;
-//            assert(payload.length() <= MAX_PAYLOAD_LEN);
-            payload.copy(record->payload, payload.length());
-            record->payload[payload.length()] = 0;
+        if (txn && txn->hasMoreL2Items) {
+            l2Item = txn->l2Iterator;
+        }
+        else {
+            l2Item = l1Item->items.begin();
+        }
 
-            record->key.type = keyType;
+        for (; l2Item != l1Item->items.end(); l2Item++) {
 
-            switch (keyType) {
-                case KeyType::SHORT:
-                    record->key.keyval.shortkey = charArrayToInt32(l1Item->keyData.data());
-                    break;
-                case KeyType::INT:
+            // TODO: Refactor!
+            if (((l2Item->writeTimestamp < transactionId) && !isTransactionActive(l2Item->writeTimestamp)) || l2Item->writeTimestamp == transactionId) {
+                auto& payload = l2Item->payload;
+                payload.copy(record->payload, payload.length());
+                record->payload[payload.length()] = 0;
 
-                    record->key.keyval.intkey = charArrayToInt64(l1Item->keyData.data());
-                    break;
-                case KeyType::VARCHAR: {
-                    uint8_t* ptr = l1Item->keyData.data();
-                    while (!*ptr) {
-                        ptr++;
+                record->key.type = keyType;
+
+                switch (keyType) {
+                    case KeyType::SHORT:
+                        record->key.keyval.shortkey = charArrayToInt32(l1Item->keyData.data());
+                        break;
+                    case KeyType::INT:
+
+                        record->key.keyval.intkey = charArrayToInt64(l1Item->keyData.data());
+                        break;
+                    case KeyType::VARCHAR: {
+                        uint8_t* ptr = l1Item->keyData.data();
+                        uint32_t index = 0;
+                        while (index < MAX_VARCHAR_LEN) {
+                            if (ptr[index]) {
+                                break;
+                            }
+                            index++;
+                        }
+                        size_t len = MAX_VARCHAR_LEN - index;
+                        ptr += index;
+                        strncpy(record->key.keyval.charkey, (char*) ptr, len);
+                        record->key.keyval.charkey[len + 1] = '\0';
                     }
-                    size_t len = MAX_VARCHAR_LEN - (ptr - l1Item->keyData.data());
-                    strncpy(record->key.keyval.charkey, (char*) ptr, len);
-                    record->key.keyval.charkey[len + 1] = '\0';
+                        break;
+                    default:
+                        return FAILURE;
                 }
-                    break;
-                default:
-                    return FAILURE;
-            }
 
-            if (txn) {
-                txn->l2Size = l1Item->items.size();
-                txn->l2Index = l2Index + 1;
-                txn->l1Offset = l1Offset;
-            }
+                if (txn) {
+                    txn->l2Iterator = ++l2Item;
+                    if (txn->l2Iterator == std::end(l1Item->items)) {
+                        txn->hasMoreL2Items = false;
+                    }
+                    else {
+                        txn->hasMoreL2Items = true;
+                    }
 
-            return SUCCESS;
+                    txn->l1Offset = l1Offset;
+                }
+
+                return SUCCESS;
+            }
+        }
+
+        if (txn) {
+            txn->hasMoreL2Items = false;
         }
     }
 
@@ -215,12 +256,21 @@ ErrCode Tree::deleteRecord(MemDB* db, TxnState *txn, Record *record) {
     return ENTRY_DNE;
 }
 
-void Tree::commit(int transactionId) {
-    std::lock_guard lock(this->mutex);
-    this->transactionLogItems.erase(transactionId);
+void Tree::commit(uint32_t transactionId) {
+    std::lock_guard lock(mutex);
+
+    removeTransaction(transactionId);
 }
 
-void Tree::abort(int transactionId) {
+void Tree::removeTransaction(uint32_t transactionId) {
+    auto it = std::find(activeTransactionIDs.begin(), activeTransactionIDs.end(), transactionId);
+    if (it != activeTransactionIDs.end()) {
+        activeTransactionIDs.erase(it);
+        transactionLogItems.erase(transactionId);
+    }
+}
+
+void Tree::abort(uint32_t transactionId) {
     std::lock_guard lock(this->mutex);
     auto& logItems = this->transactionLogItems[transactionId];
 
@@ -238,6 +288,8 @@ void Tree::abort(int transactionId) {
             }
         }
     }
+
+    removeTransaction(transactionId);
 }
 
 offset Tree::findL1Item(const uint8_t *data, TxnState* txn) {

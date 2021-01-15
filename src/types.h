@@ -48,19 +48,20 @@ class Tree;
 
 struct IdxState {
     MemDB* memDbInstance;
-    std::shared_ptr<Tree> tree;
+    Tree* tree;
 };
 
 struct TxnState {
-    explicit TxnState(uint32_t txnId): transactionId(txnId), l2Size(-1), l2Index(-1), l1Offset(NO_CHILD), firstCall(true), traversalTrace({}) {
+    explicit TxnState(uint32_t txnId): transactionId(txnId), l1Offset(NO_CHILD), firstCall(true), traversalTrace({}), hasMoreL2Items(false) {
 
     }
 
     uint32_t transactionId;
-    uint32_t l2Size;
-    uint32_t l2Index;
+
     offset l1Offset;
     bool firstCall;
     std::array<uint8_t, max_levels()> traversalTrace;
+    std::list<L2Item>::iterator l2Iterator;
+    bool hasMoreL2Items;
 };
 
