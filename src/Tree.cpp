@@ -215,15 +215,7 @@ ErrCode Tree::insertRecord(MemDB* db, TxnState *txn, Key *k, const char *payload
     l1Item->items.emplace_back(L2Item (payload, transactionId, transactionId));
 
     if (txn) {
-        TransactionLogItem log (l1Offset, payload, true);
-        auto it = this->transactionLogItems.find(transactionId);
-
-        if (it == this->transactionLogItems.end()) {
-            this->transactionLogItems.emplace(std::make_pair(transactionId, std::vector {log}));
-        }
-        else {
-            it->second.push_back(log);
-        }
+        this->transactionLogItems.emplace_back(transactionId, l1Offset, payload, true);
     }
 
 
@@ -237,29 +229,6 @@ ErrCode Tree::deleteRecord(MemDB* db, TxnState *txn, Record *record) {
 
     std::array<uint8_t, max_size()> keyData {};
     prepareKeyData(&record->key, keyData.data());
-
-//    // TODO
-//    auto l1Offset = findL1Item(keyData.data(), txn);
-//    if (!isNodeVisitable(l1Offset)) {
-//        return KEY_NOTFOUND;
-//    }
-//
-//    auto l1Item = &accessL1Item(l1Offset);
-//
-//    if (strnlen(record->payload, MAX_PAYLOAD_LEN) == 0) {
-//        l1Item->items.clear();
-//        return SUCCESS;
-//    }
-//
-//    auto& items = l1Item->items;
-//    for (auto it = items.begin(); it != items.end(); it++) {
-//        if (it->payload == record->payload) {
-//            items.erase(it);
-//            return SUCCESS;
-//        }
-//    }
-//
-//    return ENTRY_DNE;
 
     char* payload = nullptr;
     if (strnlen(record->payload, MAX_PAYLOAD_LEN)) {
@@ -351,23 +320,25 @@ void Tree::removeTransaction(uint32_t transactionId) {
     auto it = std::find(activeTransactionIDs.begin(), activeTransactionIDs.end(), transactionId);
     if (it != activeTransactionIDs.end()) {
         activeTransactionIDs.erase(it);
-        transactionLogItems.erase(transactionId);
+
+        auto end = std::remove_if(transactionLogItems.begin(), transactionLogItems.end(), [=](const TransactionLogItem& t) {
+            return t.transactionId == transactionId;
+        });
+
+        transactionLogItems.erase(end, transactionLogItems.end());
     }
 }
 
 void Tree::abort(uint32_t transactionId) {
     std::lock_guard lock(this->mutex);
-    auto& logItems = this->transactionLogItems[transactionId];
 
-    for (auto rit = logItems.rbegin(); rit != logItems.rend(); rit++) {
-        if (rit->created) {
-            auto l1Item = &accessL1Item(rit->l1Offset);
+    for (const auto& t : transactionLogItems) {
+        if (t.transactionId == transactionId && t.created) {
+            auto l1Item = &accessL1Item(t.l1Offset);
 
-            auto l2It = l1Item->items.begin();
-
-            for (; l2It != l1Item->items.end(); l2It++) {
-                if (strcmp(l2It->payload, rit->payload) == 0) {
-                    l1Item->items.erase(l2It);
+            for (auto it = l1Item->items.begin(); it != l1Item->items.end(); it++) {
+                if (strcmp(it->payload, t.payload) == 0) {
+                    l1Item->items.erase(it);
                     break;
                 }
             }
