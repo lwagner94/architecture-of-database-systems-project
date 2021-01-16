@@ -11,6 +11,18 @@ inline bool isNodePresent(offset o) {
     return o != NO_CHILD;
 }
 
+inline bool isL1Node(offset o) {
+    return o & 0x40000000;
+}
+
+inline offset getL1IndexFromOffset(offset o) {
+    return o & 0x3FFFFFFF;
+}
+
+inline offset getL1OffsetFromIndex(offset o) {
+    return o | 0x40000000;
+}
+
 inline bool isNodeVisitable(offset o) {
     if ((o != NO_CHILD) && !(o & ~0x7FFFFFFF)) {
         return true;

@@ -497,6 +497,10 @@ TEST_CASE( "node marker tests", "[foo]" ) {
     REQUIRE(isNodeVisitable(markAsNotVisitable(nodeIndex)) == false);
 
     REQUIRE(markAsVisitable(markAsNotVisitable(nodeIndex)) == nodeIndex);
+
+    REQUIRE(isL1Node(nodeIndex) == false);
+    REQUIRE(isL1Node(getL1OffsetFromIndex(nodeIndex)) == true);
+    REQUIRE(getL1IndexFromOffset(getL1OffsetFromIndex(nodeIndex)) == 1);
 }
 
 TEST_CASE( "footest?!?", "[foo]" ) {

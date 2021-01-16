@@ -11,11 +11,11 @@
 
 
 struct L0Item {
-    L0Item() : children(), l1Item(NO_CHILD){
+    L0Item() : children() {
         children.fill(NO_CHILD);
     }
 
     std::array<offset, 16> children;
-    offset l1Item;
+//    offset l1Item;
 };
 

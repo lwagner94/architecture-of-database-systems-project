@@ -60,20 +60,20 @@ inline void prepareKeyData(const Key* k, uint8_t* dest) {
     }
 }
 
-//uint32_t Tree::calculateIndex(const uint8_t* data, uint32_t level) {
-//    // Assuming prefix length = 4
-//
-//    uint8_t byte = *(data + level / 2);
-//    uint8_t nibble = 0;
-//
-//    if (level % 2 == 0) {
-//        nibble = (byte >> 4) & 0xF;
-//    }
-//    else {
-//        nibble = byte & 0xF;
-//    }
-//
-//    return nibble;
-//}
+inline uint32_t calculateIndex(const uint8_t* data, uint32_t level) {
+    // Assuming prefix length = 4
+
+    uint8_t byte = *(data + level / 2);
+    uint8_t nibble = 0;
+
+    if (level % 2 == 0) {
+        nibble = (byte >> 4) & 0xF;
+    }
+    else {
+        nibble = byte & 0xF;
+    }
+
+    return nibble;
+}
 
 

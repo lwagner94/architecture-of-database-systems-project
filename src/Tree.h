@@ -49,7 +49,6 @@ private:
     offset findL1ItemWithSmallestKey();
     offset findL1Item(const uint8_t* data, TxnState* txn);
 
-//    std::map<int, std::vector<TransactionLogItem>> transactionLogItems;
     std::vector<TransactionLogItem> transactionLogItems;
 
     std::mutex mutex;
@@ -66,7 +65,7 @@ private:
     }
 
     L1Item& accessL1Item(offset i) {
-        return l1Items[getIndexFromOffset(i)];
+        return l1Items[getL1IndexFromOffset(i)];
 //        return l1Items.at(i);
     }
 
