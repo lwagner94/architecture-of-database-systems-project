@@ -2,3 +2,5 @@
 *.results
 cmake-*
 build
+.~lock.times.ods#
+

@@ -22,6 +22,13 @@
 class MemDB;
 
 
+enum class RecursiveDeleteResult {
+    ONE_DELETED,
+    ALL_DELETED,
+    ENTRY_NOT_FOUND,
+    KEY_NOT_FOUND
+};
+
 
 class Tree{
 public:
@@ -73,5 +80,7 @@ private:
     uint32_t getTransactionId(TxnState *txn, MemDB *db);
 
     L0Item *getItem(L0Item *currentL0Item, const uint8_t index);
+
+    RecursiveDeleteResult recursiveDelete(TxnState* txn, uint32_t level, L0Item* l0Item, const uint8_t *keyData, const char* payload);
 };
 

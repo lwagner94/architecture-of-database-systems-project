@@ -237,29 +237,108 @@ ErrCode Tree::deleteRecord(MemDB* db, TxnState *txn, Record *record) {
     std::array<uint8_t, max_size()> keyData {};
     prepareKeyData(&record->key, keyData.data());
 
-    // TODO
-    auto l1Offset = findL1Item(keyData.data(), txn);
-    if (!isNodeVisitable(l1Offset)) {
-        return KEY_NOTFOUND;
+//    // TODO
+//    auto l1Offset = findL1Item(keyData.data(), txn);
+//    if (!isNodeVisitable(l1Offset)) {
+//        return KEY_NOTFOUND;
+//    }
+//
+//    auto l1Item = &accessL1Item(l1Offset);
+//
+//    if (strnlen(record->payload, MAX_PAYLOAD_LEN) == 0) {
+//        l1Item->items.clear();
+//        return SUCCESS;
+//    }
+//
+//    auto& items = l1Item->items;
+//    for (auto it = items.begin(); it != items.end(); it++) {
+//        if (it->payload == record->payload) {
+//            items.erase(it);
+//            return SUCCESS;
+//        }
+//    }
+//
+//    return ENTRY_DNE;
+
+    char* payload = nullptr;
+    if (strnlen(record->payload, MAX_PAYLOAD_LEN)) {
+        payload = record->payload;
     }
 
-    auto l1Item = &accessL1Item(l1Offset);
-
-    if (strnlen(record->payload, MAX_PAYLOAD_LEN) == 0) {
-        l1Item->items.clear();
-        return SUCCESS;
-    }
-
-    auto& items = l1Item->items;
-    for (auto it = items.begin(); it != items.end(); it++) {
-        if (it->payload == record->payload) {
-            items.erase(it);
+    auto l0Item = &accessL0Item(rootElementOffset);
+    auto result = recursiveDelete(txn, 0, l0Item, keyData.data(), payload);
+    switch (result) {
+        case RecursiveDeleteResult::ENTRY_NOT_FOUND:
+            return ENTRY_DNE;
+        case RecursiveDeleteResult::KEY_NOT_FOUND:
+            return KEY_NOTFOUND;
+        default:
             return SUCCESS;
+    }
+}
+
+RecursiveDeleteResult Tree::recursiveDelete(TxnState* txn, uint32_t level, L0Item* l0Item, const uint8_t *keyData, const char* payload) {
+    if (level == LEVELS[this->keyType]) {
+        offset l1Offset = l0Item->l1Item;
+        // Delete element!
+        if (isNodeVisitable(l1Offset)) {
+            auto l1Item = &accessL1Item(l1Offset);
+
+            if (!payload) {
+                l1Item->items.clear();
+                l0Item->l1Item = markAsNotVisitable(l1Offset);
+                return RecursiveDeleteResult::ALL_DELETED;
+            }
+
+
+            for (auto it = l1Item->items.begin(); it != l1Item->items.end(); it++) {
+                if (it->payload == payload) {
+                    l1Item->items.erase(it);
+                    if (l1Item->items.empty()) {
+                        return RecursiveDeleteResult::ALL_DELETED;
+                    }
+                    return RecursiveDeleteResult::ONE_DELETED;
+                }
+            }
+
+            return RecursiveDeleteResult::ENTRY_NOT_FOUND;
         }
     }
+    auto indices = calculateNextTwoIndices(keyData, level / 2);
+    offset index = (level % 2 == 0) ? indices.first : indices.second;
 
-    return ENTRY_DNE;
+    if (!isNodeVisitable(l0Item->children[index])) {
+        return RecursiveDeleteResult::KEY_NOT_FOUND;
+    }
+
+    L0Item* next = &accessL0Item(l0Item->children[index]);
+    auto result = recursiveDelete(txn, level + 1, next, keyData, payload);
+
+    switch (result) {
+        case RecursiveDeleteResult::ALL_DELETED: {
+            l0Item->children[index] = markAsNotVisitable(l0Item->children[index]);
+
+            bool anyoneVisitable = false;
+            for (auto i = 0; i < 16; i++) {
+                if (isNodeVisitable(l0Item->children[i])) {
+                    anyoneVisitable = true;
+                    break;
+                }
+            }
+            
+            return anyoneVisitable ? RecursiveDeleteResult::ONE_DELETED : RecursiveDeleteResult::ALL_DELETED;
+        }
+
+        case RecursiveDeleteResult::ONE_DELETED:
+            return result;
+        case RecursiveDeleteResult::ENTRY_NOT_FOUND:
+            return result;
+        case RecursiveDeleteResult::KEY_NOT_FOUND:
+            return result;
+
+    }
 }
+
 
 void Tree::commit(uint32_t transactionId) {
     std::lock_guard lock(mutex);
