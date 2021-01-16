@@ -32,9 +32,14 @@ uint32_t Tree::getTransactionId(TxnState *txn, MemDB* db) {
 }
 
 Tree::Tree(KeyType keyType) : keyType(keyType), l0Items(), l1Items(), rootElementOffset(0) {
-    l0Items.emplace_back(L0Item {});
-//    l0Items.reserve(1073741824 / 16);
+    std::array<uint8_t, max_size()> fakeKey {};
 
+    l0Items.emplace_back(L0Item {});
+    l1Items.emplace_back(L1Item {fakeKey});
+
+    // TODO
+    l0Items.reserve(1577798 + 1000);
+    l1Items.reserve(129537 + 1000);
 }
 
 ErrCode Tree::get(MemDB* db, TxnState *txn, Record *record) {
@@ -46,7 +51,7 @@ ErrCode Tree::get(MemDB* db, TxnState *txn, Record *record) {
     prepareKeyData(&record->key, keyData.data());
 
     auto l1Offset = findL1Item(keyData.data(), txn);
-    if (!hasChild(l1Offset)) {
+    if (!isNodeVisitable(l1Offset)) {
         return KEY_NOTFOUND;
     }
     auto l1Item = &accessL1Item(l1Offset);
@@ -114,7 +119,7 @@ ErrCode Tree::getNext(MemDB *db, TxnState *txn, Record *record) {
             }
         }
 
-        if (!hasChild(l1Offset)) {
+        if (!isNodeVisitable(l1Offset)) {
             return DB_END;
         }
 
@@ -234,7 +239,7 @@ ErrCode Tree::deleteRecord(MemDB* db, TxnState *txn, Record *record) {
 
     // TODO
     auto l1Offset = findL1Item(keyData.data(), txn);
-    if (!hasChild(l1Offset)) {
+    if (!isNodeVisitable(l1Offset)) {
         return KEY_NOTFOUND;
     }
 
@@ -299,14 +304,14 @@ offset Tree::findL1Item(const uint8_t *data, TxnState* txn) {
         auto indices = calculateNextTwoIndices(data, level);
 
         offset i = currentL0Item->children[indices.first];
-        if (!hasChild(i)) {
+        if (!isNodeVisitable(i)) {
             return i;
         }
 
         currentL0Item = &accessL0Item(i);
 
         i = currentL0Item->children[indices.second];
-        if (!hasChild(i)) {
+        if (!isNodeVisitable(i)) {
             return i;
         }
 
@@ -334,7 +339,7 @@ offset Tree::findL1ItemWithSmallestKey() {
         // TODO: Extract constant 16
         for (uint8_t i = 0; i < 16; i++) {
             offset idx = current->children[i];
-            if (hasChild(idx)) {
+            if (isNodeVisitable(idx)) {
                 current =  &accessL0Item(idx);
                 found = true;
 
@@ -355,30 +360,33 @@ offset Tree::findOrConstructL1Item(const std::array<uint8_t, max_size()>& keyDat
 
     for (size_t level = 0; level < LEVELS[this->keyType] / 2; level++) {
         auto indices = calculateNextTwoIndices(keyData.data(), level);
-
-        offset i = currentL0Item->children[indices.first];
-        if (!hasChild(i)) {
-            i = l0Items.size();
-            currentL0Item->children[indices.first] = i;
-            l0Items.emplace_back(L0Item ());
-        }
-        currentL0Item = &accessL0Item(i);
-
-        i = currentL0Item->children[indices.second];
-        if (!hasChild(i)) {
-            i = l0Items.size();
-            currentL0Item->children[indices.second] = i;
-            l0Items.emplace_back(L0Item ());
-        }
-        currentL0Item = &accessL0Item(i);
+        currentL0Item = getItem(currentL0Item, indices.first);
+        currentL0Item = getItem(currentL0Item, indices.second);
     }
 
-    if (!hasChild(currentL0Item->l1Item)) {
-        currentL0Item->l1Item = l1Items.size();
+    // TODO: What to do if we have a duplicate payload? Then markAsVisitable is "wrong"
+    offset l1Offset = currentL0Item->l1Item;
+
+    if (!isNodePresent(l1Offset)) {
+        l1Offset = l1Items.size();
         l1Items.emplace_back(L1Item {keyData});
     }
 
+    currentL0Item->l1Item = markAsVisitable(l1Offset);
     return currentL0Item->l1Item;
+}
+
+L0Item *Tree::getItem(L0Item *currentL0Item, const uint8_t index) {
+    offset i = currentL0Item->children[index];
+    if (!isNodePresent(i)) {
+        i = l0Items.size();
+        currentL0Item->children[index] = markAsVisitable(i);
+        l0Items.emplace_back(L0Item ());
+    }
+    else {
+        currentL0Item->children[index] = markAsVisitable(i);
+    }
+    return &accessL0Item(i);
 }
 
 
@@ -401,18 +409,21 @@ offset Tree::recursive(TxnState* txn, uint32_t level, L0Item* l0Item, uint32_t* 
     }
 
     for (int i = initial; i < 16; i++) {
-        if (hasChild(l0Item->children[i])) {
+        if (isNodeVisitable(l0Item->children[i])) {
             L0Item* next = &accessL0Item(l0Item->children[i]);
 
             uint32_t idx = i;
             offset l1Item = recursive(txn, level + 1, next, &idx);
 
-            txn->traversalTrace[level] = idx;
+            if (txn) {
+                txn->traversalTrace[level] = idx;
+            }
+
             if (idx > 16) {
                 *indexUpdate = *indexUpdate + 1;
                 txn->traversalTrace[level] = 0;
             }
-            if (hasChild(l1Item)) {
+            if (isNodeVisitable(l1Item)) {
                 return l1Item;
             }
         }

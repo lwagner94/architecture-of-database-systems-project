@@ -5,10 +5,29 @@
 #pragma once
 
 typedef uint32_t offset;
-constexpr offset NO_CHILD = -1;
+constexpr offset NO_CHILD = 0;
 
-inline bool hasChild(offset o) {
+inline bool isNodePresent(offset o) {
     return o != NO_CHILD;
+}
+
+inline bool isNodeVisitable(offset o) {
+    if ((o != NO_CHILD) && !(o & ~0x7FFFFFFF)) {
+        return true;
+    }
+    return false;
+}
+
+inline offset getIndexFromOffset(offset o) {
+    return o & 0x7FFFFFFF;
+}
+
+inline offset markAsVisitable(offset o) {
+    return o & 0x7FFFFFFF;
+}
+
+inline offset markAsNotVisitable(offset o) {
+    return o | ~0x7FFFFFFF;
 }
 
 constexpr size_t PREFIX_LENGTH = 4;

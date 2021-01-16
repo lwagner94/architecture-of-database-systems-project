@@ -44,6 +44,7 @@ private:
 
     std::map<int, std::vector<TransactionLogItem>> transactionLogItems;
     std::mutex mutex;
+//    SpinLock mutex;
 
     std::vector<L0Item> l0Items;
     std::vector<L1Item> l1Items;
@@ -51,16 +52,16 @@ private:
     offset rootElementOffset;
 
     L0Item& accessL0Item(offset i) {
-        return l0Items[i];
+        return l0Items[getIndexFromOffset(i)];
 //        return l0Items.at(i);
     }
 
     L1Item& accessL1Item(offset i) {
-        return l1Items[i];
+        return l1Items[getIndexFromOffset(i)];
 //        return l1Items.at(i);
     }
 
-//    SpinLock mutex;
+
 
 
     offset recursive(TxnState *txn, uint32_t level, L0Item* l0Item, uint32_t* indexUpdate);
@@ -70,5 +71,7 @@ private:
     bool isTransactionActive(uint32_t transactionID);
 
     uint32_t getTransactionId(TxnState *txn, MemDB *db);
+
+    L0Item *getItem(L0Item *currentL0Item, const uint8_t index);
 };
 

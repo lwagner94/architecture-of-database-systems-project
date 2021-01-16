@@ -4,6 +4,7 @@
 #include <string>
 #include <string.h>
 #include "bitutils.h"
+#include "types.h"
 
 TEST_CASE( "Basic create/drop tests", "[create]" ) {
     MemDB db;
@@ -479,4 +480,21 @@ TEST_CASE( "get -> KEY_NOTFOUND and then getNext tests", "[foo]" ) {
     REQUIRE(db.commitTransaction(txn) == SUCCESS);
     REQUIRE(db.closeIndex(state) == SUCCESS);
     REQUIRE(db.drop((char*) "hello") == SUCCESS);
+}
+
+TEST_CASE( "node marker tests", "[foo]" ) {
+    offset nodeIndex = NO_CHILD;
+
+    REQUIRE(isNodePresent(nodeIndex) == false);
+    REQUIRE(isNodeVisitable(nodeIndex) == false);
+
+    nodeIndex = 1;
+
+    REQUIRE(isNodePresent(nodeIndex) == true);
+    REQUIRE(isNodeVisitable(nodeIndex) == true);
+
+    REQUIRE(isNodePresent(markAsNotVisitable(nodeIndex)) == true);
+    REQUIRE(isNodeVisitable(markAsNotVisitable(nodeIndex)) == false);
+
+    REQUIRE(markAsVisitable(markAsNotVisitable(nodeIndex)) == nodeIndex);
 }
