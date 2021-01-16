@@ -6,9 +6,11 @@ project(architecture_of_database_systems_project)
 
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -g")
 set(CMAKE_CXX_FLAGS "-Wall -Wextra")
-set(CMAKE_CXX_FLAGS_DEBUG "-g")
+set(CMAKE_CXX_FLAGS_DEBUG "-g -fsanitize=address")
 set(CMAKE_C_COMPILER gcc)
 set(CMAKE_CXX_COMPILER g++)
+set(CMAKE_EXE_LINKER_FLAGS_DEBUG "-fsanitize=address" )
+#set(CMAKE_EXE_LINKER_FLAGS_RELEASE "-fsanitize=address" )
 
 add_executable(speed_test reference/driver/speed_test.c)
 add_executable(unit_test reference/driver/unittests.c)

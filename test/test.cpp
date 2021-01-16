@@ -527,7 +527,7 @@ TEST_CASE( "footest?!?", "[foo]" ) {
         REQUIRE(db.getNext(state, txn, &r) == SUCCESS);
 
         REQUIRE(r.key.type == SHORT);
-        REQUIRE(r.key.keyval.intkey == UINT32_MAX);
+        REQUIRE(r.key.keyval.shortkey == UINT32_MAX);
         REQUIRE("payload2" == std::string(r.payload));
     }
 

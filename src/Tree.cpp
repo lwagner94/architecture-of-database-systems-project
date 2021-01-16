@@ -162,7 +162,7 @@ ErrCode Tree::getNext(MemDB *db, TxnState *txn, Record *record) {
                         size_t len = MAX_VARCHAR_LEN - index;
                         ptr += index;
                         strncpy(record->key.keyval.charkey, (char*) ptr, len);
-                        record->key.keyval.charkey[len + 1] = '\0';
+                        record->key.keyval.charkey[len] = '\0';
                     }
                         break;
                     default:

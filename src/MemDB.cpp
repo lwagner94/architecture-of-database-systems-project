@@ -12,7 +12,11 @@ MemDB::MemDB(): transactionIDCounter(0){
 }
 
 
-MemDB::~MemDB() = default;
+MemDB::~MemDB() {
+    for (auto& it : this->tries) {
+        delete it.second;
+    }
+}
 
 ErrCode MemDB::create(KeyType type, char *name) {
     std::lock_guard<std::mutex> l(this->mtx);
@@ -35,8 +39,9 @@ ErrCode MemDB::drop(char *name) {
         return FAILURE;
     }
 
+    auto trie = it->second;
     tries.erase(it);
-    delete it->second;
+    delete trie;
     return SUCCESS;
 }
 
