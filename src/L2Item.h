@@ -5,17 +5,17 @@
 #pragma once
 
 #include <vector>
-#include <string>
+#include <string.h>
+#include "server.h"
 
 struct L2Item {
     L2Item(const char* payload, uint32_t readTimestamp, uint32_t writeTimestamp):
-        payload(payload),
         readTimestamp(readTimestamp),
         writeTimestamp(writeTimestamp){
-
+        strcpy(this->payload, payload);
     };
 
-    std::string payload;
+    char payload[MAX_PAYLOAD_LEN + 1];
     uint32_t readTimestamp;
     uint32_t writeTimestamp;
 };

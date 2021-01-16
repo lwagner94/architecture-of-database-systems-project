@@ -59,10 +59,11 @@ ErrCode Tree::get(MemDB* db, TxnState *txn, Record *record) {
 
         // TODO: Refactor!
         if (((l2Item->writeTimestamp < transactionId) && !isTransactionActive(l2Item->writeTimestamp)) || l2Item->writeTimestamp == transactionId) {
-            auto& payload = l2Item->payload;
+//            auto& payload = l2Item->payload;
 //            assert(payload.length() <= MAX_PAYLOAD_LEN);
-            payload.copy(record->payload, payload.length());
-            record->payload[payload.length()] = 0;
+//            payload.copy(record->payload, payload.length());
+//            record->payload[payload.length()] = 0;
+            strcpy(record->payload, l2Item->payload);
 
             if (txn) {
                 txn->firstCall = false;
@@ -136,10 +137,10 @@ ErrCode Tree::getNext(MemDB *db, TxnState *txn, Record *record) {
 
             // TODO: Refactor!
             if (((l2Item->writeTimestamp < transactionId) && !isTransactionActive(l2Item->writeTimestamp)) || l2Item->writeTimestamp == transactionId) {
-                auto& payload = l2Item->payload;
-                payload.copy(record->payload, payload.length());
-                record->payload[payload.length()] = 0;
-
+//                auto& payload = l2Item->payload;
+//                payload.copy(record->payload, payload.length());
+//                record->payload[payload.length()] = 0;
+                strcpy(record->payload, l2Item->payload);
                 record->key.type = keyType;
 
                 switch (keyType) {
@@ -206,7 +207,7 @@ ErrCode Tree::insertRecord(MemDB* db, TxnState *txn, Key *k, const char *payload
     auto l1Item = &accessL1Item(l1Offset);
 
     for (const auto& l2 : l1Item->items) {
-        if (payload == l2.payload) {
+        if (strcmp(l2.payload, payload) == 0) {
             return ENTRY_EXISTS;
         }
     }
@@ -292,7 +293,7 @@ RecursiveDeleteResult Tree::recursiveDelete(uint32_t level, L0Item* l0Item, cons
 
 
             for (auto it = l1Item->items.begin(); it != l1Item->items.end(); it++) {
-                if (it->payload == payload) {
+                if (strcmp(it->payload, payload) == 0) {
                     l1Item->items.erase(it);
                     if (l1Item->items.empty()) {
                         return RecursiveDeleteResult::ALL_DELETED;
