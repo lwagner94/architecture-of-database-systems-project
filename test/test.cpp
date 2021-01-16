@@ -498,3 +498,41 @@ TEST_CASE( "node marker tests", "[foo]" ) {
 
     REQUIRE(markAsVisitable(markAsNotVisitable(nodeIndex)) == nodeIndex);
 }
+
+TEST_CASE( "footest?!?", "[foo]" ) {
+    MemDB db;
+    REQUIRE(db.create(SHORT, (char*) "hello") == SUCCESS);
+    IdxState* state = nullptr;
+    REQUIRE(db.openIndex("hello", &state) == SUCCESS);
+
+    Key k;
+    k.type = SHORT;
+    k.keyval.shortkey = 0;
+    REQUIRE(db.insertRecord(state, nullptr, &k, "payload1") == SUCCESS);
+
+    k.keyval.shortkey = UINT32_MAX;
+    REQUIRE(db.insertRecord(state, nullptr, &k, "payload2") == SUCCESS);
+
+    TxnState* txn = nullptr;
+
+    REQUIRE(db.beginTransaction(&txn) == SUCCESS);
+
+    Record r;
+    SECTION("first getNext, with txn") {
+        r.key.keyval.shortkey = 0;
+        r.key.type = SHORT;
+        r.payload[0] = 0;
+        REQUIRE(db.deleteRecord(state, txn, &r) == SUCCESS);
+
+        REQUIRE(db.getNext(state, txn, &r) == SUCCESS);
+
+        REQUIRE(r.key.type == SHORT);
+        REQUIRE(r.key.keyval.intkey == UINT32_MAX);
+        REQUIRE("payload2" == std::string(r.payload));
+    }
+
+
+    REQUIRE(db.commitTransaction(txn) == SUCCESS);
+    REQUIRE(db.closeIndex(state) == SUCCESS);
+    REQUIRE(db.drop((char*) "hello") == SUCCESS);
+}
