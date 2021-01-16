@@ -266,7 +266,7 @@ ErrCode Tree::deleteRecord(MemDB* db, TxnState *txn, Record *record) {
     }
 
     auto l0Item = &accessL0Item(rootElementOffset);
-    auto result = recursiveDelete(txn, 0, l0Item, keyData.data(), payload);
+    auto result = recursiveDelete(0, l0Item, keyData.data(), payload);
     switch (result) {
         case RecursiveDeleteResult::ENTRY_NOT_FOUND:
             return ENTRY_DNE;
@@ -277,7 +277,7 @@ ErrCode Tree::deleteRecord(MemDB* db, TxnState *txn, Record *record) {
     }
 }
 
-RecursiveDeleteResult Tree::recursiveDelete(TxnState* txn, uint32_t level, L0Item* l0Item, const uint8_t *keyData, const char* payload) {
+RecursiveDeleteResult Tree::recursiveDelete(uint32_t level, L0Item* l0Item, const uint8_t *keyData, const char* payload) {
     if (level == LEVELS[this->keyType]) {
         offset l1Offset = l0Item->l1Item;
         // Delete element!
@@ -312,7 +312,7 @@ RecursiveDeleteResult Tree::recursiveDelete(TxnState* txn, uint32_t level, L0Ite
     }
 
     L0Item* next = &accessL0Item(l0Item->children[index]);
-    auto result = recursiveDelete(txn, level + 1, next, keyData, payload);
+    auto result = recursiveDelete(level + 1, next, keyData, payload);
 
     switch (result) {
         case RecursiveDeleteResult::ALL_DELETED: {
@@ -325,7 +325,7 @@ RecursiveDeleteResult Tree::recursiveDelete(TxnState* txn, uint32_t level, L0Ite
                     break;
                 }
             }
-            
+
             return anyoneVisitable ? RecursiveDeleteResult::ONE_DELETED : RecursiveDeleteResult::ALL_DELETED;
         }
 
