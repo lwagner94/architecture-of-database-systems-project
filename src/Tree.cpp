@@ -215,7 +215,7 @@ ErrCode Tree::insertRecord(MemDB* db, TxnState *txn, Key *k, const char *payload
     l1Item->items.emplace_back(L2Item (payload, transactionId, transactionId));
 
     if (txn) {
-        TransactionLogItem log {l1Offset, payload, true};
+        TransactionLogItem log (l1Offset, payload, true);
         auto it = this->transactionLogItems.find(transactionId);
 
         if (it == this->transactionLogItems.end()) {
@@ -366,7 +366,7 @@ void Tree::abort(uint32_t transactionId) {
             auto l2It = l1Item->items.begin();
 
             for (; l2It != l1Item->items.end(); l2It++) {
-                if (l2It->payload == rit->payload) {
+                if (strcmp(l2It->payload, rit->payload) == 0) {
                     l1Item->items.erase(l2It);
                     break;
                 }
