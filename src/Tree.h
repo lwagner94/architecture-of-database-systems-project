@@ -29,6 +29,16 @@ enum class RecursiveDeleteResult {
     KEY_NOT_FOUND
 };
 
+struct ReadPosition {
+    ReadPosition(): l1Offset(NO_CHILD), l2Iterator({}), hasMoreL2Items(false) {
+
+    }
+
+    offset l1Offset;
+    std::list<L2Item>::iterator l2Iterator;
+    bool hasMoreL2Items;
+};
+
 
 class Tree{
 public:
@@ -43,7 +53,7 @@ public:
 
     void commit(uint32_t transactionId);
     void abort(uint32_t transactionId);
-    void visit(TxnState* txn);
+
 private:
     offset findOrConstructL1Item(const std::array<uint8_t, max_size()>& keyData);
     offset findL1ItemWithSmallestKey();
@@ -58,6 +68,7 @@ private:
     std::vector<L1Item> l1Items;
     std::vector<uint32_t> activeTransactionIDs;
     offset rootElementOffset;
+    std::map<uint32_t, ReadPosition> readPositions;
 
     L0Item& accessL0Item(offset i) {
         return l0Items[getIndexFromOffset(i)];

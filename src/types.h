@@ -83,16 +83,12 @@ struct IdxState {
 };
 
 struct TxnState {
-    explicit TxnState(uint32_t txnId): transactionId(txnId), l1Offset(NO_CHILD), firstCall(true), traversalTrace({}), hasMoreL2Items(false) {
+    explicit TxnState(uint32_t txnId): transactionId(txnId), firstCall(true), traversalTrace({}) {
 
     }
 
     uint32_t transactionId;
-
-    offset l1Offset;
     bool firstCall;
     std::array<uint8_t, max_levels()> traversalTrace;
-    std::list<L2Item>::iterator l2Iterator;
-    bool hasMoreL2Items;
 };
 

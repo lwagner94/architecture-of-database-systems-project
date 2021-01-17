@@ -36,7 +36,7 @@ private:
 
 
     std::map<std::string, Tree*> tries;
-    std::mutex mtx;
+    std::shared_mutex mtx;
 
 //    std::vector<int> transactionIds;
 

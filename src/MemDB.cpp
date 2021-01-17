@@ -19,7 +19,7 @@ MemDB::~MemDB() {
 }
 
 ErrCode MemDB::create(KeyType type, char *name) {
-    std::lock_guard<std::mutex> l(this->mtx);
+    std::lock_guard<std::shared_mutex> l(this->mtx);
 
     if (this->tries.count(name) != 0) {
         return DB_EXISTS;
@@ -31,7 +31,7 @@ ErrCode MemDB::create(KeyType type, char *name) {
 }
 
 ErrCode MemDB::drop(char *name) {
-    std::lock_guard<std::mutex> l(this->mtx);
+    std::lock_guard<std::shared_mutex> l(this->mtx);
 
     auto it = tries.find(name);
 
@@ -46,7 +46,7 @@ ErrCode MemDB::drop(char *name) {
 }
 
 ErrCode MemDB::openIndex(const char *name, IdxState **idxState) {
-    std::lock_guard<std::mutex> l(this->mtx);
+    std::shared_lock<std::shared_mutex> l(this->mtx);
     auto it = this->tries.find(name);
     if (it == this->tries.end()) {
         return DB_DNE;
@@ -92,7 +92,7 @@ ErrCode MemDB::beginTransaction(TxnState **txn) {
 }
 
 ErrCode MemDB::commitTransaction(TxnState *txn) {
-    std::lock_guard<std::mutex> l(this->mtx);
+    std::shared_lock<std::shared_mutex> l(this->mtx);
     for (auto& s : this->tries) {
         s.second->commit(txn->transactionId);
     }
@@ -102,7 +102,7 @@ ErrCode MemDB::commitTransaction(TxnState *txn) {
 }
 
 ErrCode MemDB::abortTransaction(TxnState *txn) {
-    std::lock_guard<std::mutex> l(this->mtx);
+    std::shared_lock<std::shared_mutex> l(this->mtx);
 
     for (auto& s : this->tries) {
         s.second->abort(txn->transactionId);

@@ -21,10 +21,14 @@ uint32_t Tree::getTransactionId(TxnState *txn, MemDB* db) {
         return db->getTransactionID();
     }
     else {
-        if (std::find(activeTransactionIDs.begin(),
-                      activeTransactionIDs.end(),
-                      txn->transactionId) == activeTransactionIDs.end()) {
-            activeTransactionIDs.push_back(txn->transactionId);
+//        if (std::find(activeTransactionIDs.begin(),
+//                      activeTransactionIDs.end(),
+//                      txn->transactionId) == activeTransactionIDs.end()) {
+//            activeTransactionIDs.push_back(txn->transactionId);
+//        }
+
+        if (readPositions.find(txn->transactionId) == readPositions.end()) {
+            readPositions.insert(std::make_pair(txn->transactionId, ReadPosition {}));
         }
 
         return txn->transactionId;
@@ -43,13 +47,12 @@ Tree::Tree(KeyType keyType) : keyType(keyType), l0Items(), l1Items(), rootElemen
 }
 
 ErrCode Tree::get(MemDB* db, TxnState *txn, Record *record) {
-//    std::shared_lock lock(this->mutex);
-    std::lock_guard lock(this->mutex);
-    auto transactionId = getTransactionId(txn, db);
-
     std::array<uint8_t, max_size()> keyData {};
     prepareKeyData(&record->key, keyData.data());
 
+    std::lock_guard lock(this->mutex);
+
+    auto transactionId = getTransactionId(txn, db);
     auto l1Offset = findL1Item(keyData.data(), txn);
     if (!isNodeVisitable(l1Offset)) {
         return KEY_NOTFOUND;
@@ -67,14 +70,14 @@ ErrCode Tree::get(MemDB* db, TxnState *txn, Record *record) {
 
             if (txn) {
                 txn->firstCall = false;
-                txn->l2Iterator = ++l2Item;
-                if (txn->l2Iterator == std::end(l1Item->items)) {
-                    txn->hasMoreL2Items = false;
+                readPositions[txn->transactionId].l2Iterator = ++l2Item;
+                if (readPositions[txn->transactionId].l2Iterator == std::end(l1Item->items)) {
+                    readPositions[txn->transactionId].hasMoreL2Items = false;
                 }
                 else {
-                    txn->hasMoreL2Items = true;
+                    readPositions[txn->transactionId].hasMoreL2Items = true;
                 }
-                txn->l1Offset = l1Offset;
+                readPositions[txn->transactionId].l1Offset = l1Offset;
             }
 
             return SUCCESS;
@@ -85,7 +88,8 @@ ErrCode Tree::get(MemDB* db, TxnState *txn, Record *record) {
 }
 
 bool Tree::isTransactionActive(uint32_t transactionID) {
-    return std::find(activeTransactionIDs.begin(), activeTransactionIDs.end(), transactionID) != activeTransactionIDs.end();
+//    return std::find(activeTransactionIDs.begin(), activeTransactionIDs.end(), transactionID) != activeTransactionIDs.end();
+    return readPositions.find(transactionID) != readPositions.end();
 }
 
 ErrCode Tree::getNext(MemDB *db, TxnState *txn, Record *record) {
@@ -104,13 +108,10 @@ ErrCode Tree::getNext(MemDB *db, TxnState *txn, Record *record) {
         else if (txn->firstCall) {
             uint32_t _ = 0;
             l1Offset = recursive(txn, 0, &accessL0Item(rootElementOffset), &_);
-//            if (_) {
-//                return DB_END;
-//            }
             txn->firstCall = false;
         }
-        else if (txn->hasMoreL2Items) {
-            l1Offset = txn->l1Offset;
+        else if (readPositions[txn->transactionId].hasMoreL2Items) {
+            l1Offset = readPositions[txn->transactionId].l1Offset;
         }
         else {
             uint32_t _ = 0;
@@ -126,14 +127,16 @@ ErrCode Tree::getNext(MemDB *db, TxnState *txn, Record *record) {
 
         auto l1Item = &accessL1Item(l1Offset);
 
-        if (txn && txn->hasMoreL2Items) {
-            l2Item = txn->l2Iterator;
+        if (txn && readPositions[txn->transactionId].hasMoreL2Items) {
+            l2Item = readPositions[txn->transactionId].l2Iterator;
         }
         else {
             l2Item = l1Item->items.begin();
         }
 
         for (; l2Item != l1Item->items.end(); l2Item++) {
+
+            assert(l2Item != l1Item->items.end());
 
             // TODO: Refactor!
             if (((l2Item->writeTimestamp < transactionId) && !isTransactionActive(l2Item->writeTimestamp)) || l2Item->writeTimestamp == transactionId) {
@@ -171,15 +174,15 @@ ErrCode Tree::getNext(MemDB *db, TxnState *txn, Record *record) {
                 }
 
                 if (txn) {
-                    txn->l2Iterator = ++l2Item;
-                    if (txn->l2Iterator == std::end(l1Item->items)) {
-                        txn->hasMoreL2Items = false;
+                    readPositions[txn->transactionId].l2Iterator = ++l2Item;
+                    if (readPositions[txn->transactionId].l2Iterator == std::end(l1Item->items)) {
+                        readPositions[txn->transactionId].hasMoreL2Items = false;
                     }
                     else {
-                        txn->hasMoreL2Items = true;
+                        readPositions[txn->transactionId].hasMoreL2Items = true;
                     }
 
-                    txn->l1Offset = l1Offset;
+                    readPositions[txn->transactionId].l1Offset = l1Offset;
                 }
 
                 return SUCCESS;
@@ -187,7 +190,7 @@ ErrCode Tree::getNext(MemDB *db, TxnState *txn, Record *record) {
         }
 
         if (txn) {
-            txn->hasMoreL2Items = false;
+            readPositions[txn->transactionId].hasMoreL2Items = false;
         }
     }
 
@@ -197,12 +200,12 @@ ErrCode Tree::getNext(MemDB *db, TxnState *txn, Record *record) {
 
 
 ErrCode Tree::insertRecord(MemDB* db, TxnState *txn, Key *k, const char *payload) {
+    std::array<uint8_t, max_size()> keyData {};
+    prepareKeyData(k, keyData.data());
+
     std::lock_guard lock(this->mutex);
 
     auto transactionId = getTransactionId(txn, db);
-    std::array<uint8_t, max_size()> keyData {};
-
-    prepareKeyData(k, keyData.data());
     auto l1Offset = findOrConstructL1Item(keyData);
     auto l1Item = &accessL1Item(l1Offset);
 
@@ -223,12 +226,11 @@ ErrCode Tree::insertRecord(MemDB* db, TxnState *txn, Key *k, const char *payload
 }
 
 ErrCode Tree::deleteRecord(MemDB* db, TxnState *txn, Record *record) {
-    std::lock_guard lock(this->mutex);
-
-    auto transactionId = getTransactionId(txn, db);
-
     std::array<uint8_t, max_size()> keyData {};
     prepareKeyData(&record->key, keyData.data());
+
+    std::lock_guard lock(this->mutex);
+    auto transactionId = getTransactionId(txn, db);
 
     char* payload = nullptr;
     if (strnlen(record->payload, MAX_PAYLOAD_LEN)) {
@@ -262,6 +264,12 @@ RecursiveDeleteResult Tree::recursiveDelete(uint32_t level, L0Item* l0Item, cons
             auto l1Item = &accessL1Item(l1Offset);
 
             if (!payload) {
+                for (auto& readPosition : readPositions) {
+                    if (readPosition.second.l1Offset == l1Offset) {
+                        readPosition.second.hasMoreL2Items = false;
+                    }
+                }
+
                 l1Item->items.clear();
                 l0Item->children[index] = markAsNotVisitable(l1Offset);
                 return RecursiveDeleteResult::ALL_DELETED;
@@ -270,9 +278,23 @@ RecursiveDeleteResult Tree::recursiveDelete(uint32_t level, L0Item* l0Item, cons
 
             for (auto it = l1Item->items.begin(); it != l1Item->items.end(); it++) {
                 if (strcmp(it->payload, payload) == 0) {
+
+                    for (auto& readPosition : readPositions) {
+                        if (readPosition.second.l1Offset == l1Offset && readPosition.second.l2Iterator == it) {
+                            readPosition.second.l2Iterator = ++readPosition.second.l2Iterator;
+                        }
+                    }
+
                     l1Item->items.erase(it);
                     if (l1Item->items.empty()) {
                         l0Item->children[index] = markAsNotVisitable(l1Offset);
+
+                        for (auto& readPosition : readPositions) {
+                            if (readPosition.second.l1Offset == l1Offset) {
+                                readPosition.second.hasMoreL2Items = false;
+                            }
+                        }
+
                         return RecursiveDeleteResult::ALL_DELETED;
                     }
                     return RecursiveDeleteResult::ONE_DELETED;
@@ -323,9 +345,9 @@ void Tree::commit(uint32_t transactionId) {
 }
 
 void Tree::removeTransaction(uint32_t transactionId) {
-    auto it = std::find(activeTransactionIDs.begin(), activeTransactionIDs.end(), transactionId);
-    if (it != activeTransactionIDs.end()) {
-        activeTransactionIDs.erase(it);
+    auto it = readPositions.find(transactionId);
+    if (it != readPositions.end()) {
+        readPositions.erase(it);
 
         auto end = std::remove_if(transactionLogItems.begin(), transactionLogItems.end(), [=](const TransactionLogItem& t) {
             return t.transactionId == transactionId;
@@ -536,13 +558,6 @@ L0Item *Tree::getItem(L0Item *currentL0Item, const uint8_t index) {
     return &accessL0Item(i);
 }
 
-
-void Tree::visit(TxnState* txn) {
-    auto root = &accessL0Item(rootElementOffset);
-    uint32_t idx = 0;
-
-    recursive(txn, 0, root, &idx);
-}
 
 offset Tree::recursive(TxnState* txn, uint32_t level, L0Item* l0Item, uint32_t* indexUpdate) {
     assert(txn);
