@@ -16,9 +16,9 @@
 
 
 
-uint32_t Tree::getTransactionId(TxnState *txn, MemDB* db) {
+uint32_t Tree::getTransactionId(TxnState *txn) {
     if (!txn) {
-        return db->getTransactionID();
+        return memDb->getTransactionID();
     }
     else {
         if (readPositions.find(txn->transactionId) == readPositions.end()) {
@@ -29,7 +29,7 @@ uint32_t Tree::getTransactionId(TxnState *txn, MemDB* db) {
     }
 }
 
-Tree::Tree(KeyType keyType) : keyType(keyType), l0Items(), l1Items(), rootElementOffset(0) {
+Tree::Tree(KeyType keyType, MemDB* memDb) : memDb(memDb), keyType(keyType), l0Items(), l1Items(), rootElementOffset(0) {
     std::array<uint8_t, max_size()> fakeKey {};
 
     l0Items.emplace_back(L0Item {});
@@ -40,13 +40,13 @@ Tree::Tree(KeyType keyType) : keyType(keyType), l0Items(), l1Items(), rootElemen
     l1Items.reserve(129537 + 1000);
 }
 
-ErrCode Tree::get(MemDB* db, TxnState *txn, Record *record) {
+ErrCode Tree::get(TxnState *txn, Record *record) {
     std::array<uint8_t, max_size()> keyData {};
     prepareKeyData(&record->key, keyData.data());
 
     std::lock_guard lock(this->mutex);
 
-    auto transactionId = getTransactionId(txn, db);
+    auto transactionId = getTransactionId(txn);
     auto l1Offset = findL1Item(keyData.data(), txn);
     if (!isNodeVisitable(l1Offset)) {
         return KEY_NOTFOUND;
@@ -81,9 +81,9 @@ bool Tree::isTransactionActive(uint32_t transactionID) {
     return readPositions.count(transactionID) > 0;
 }
 
-ErrCode Tree::getNext(MemDB *db, TxnState *txn, Record *record) {
+ErrCode Tree::getNext(TxnState *txn, Record *record) {
     std::lock_guard lock(this->mutex);
-    auto transactionId = getTransactionId(txn, db);
+    auto transactionId = getTransactionId(txn);
 
     while (true) {
         offset l1Offset;
@@ -179,13 +179,13 @@ ErrCode Tree::getNext(MemDB *db, TxnState *txn, Record *record) {
 }
 
 
-ErrCode Tree::insertRecord(MemDB* db, TxnState *txn, Key *k, const char *payload) {
+ErrCode Tree::insertRecord(TxnState *txn, Key *k, const char *payload) {
     std::array<uint8_t, max_size()> keyData {};
     prepareKeyData(k, keyData.data());
 
     std::lock_guard lock(this->mutex);
 
-    auto transactionId = getTransactionId(txn, db);
+    auto transactionId = getTransactionId(txn);
     auto l1Offset = findOrConstructL1Item(keyData);
     auto l1Item = &accessL1Item(l1Offset);
 
@@ -205,7 +205,7 @@ ErrCode Tree::insertRecord(MemDB* db, TxnState *txn, Key *k, const char *payload
     return SUCCESS;
 }
 
-ErrCode Tree::deleteRecord(MemDB* db, TxnState *txn, Record *record) {
+ErrCode Tree::deleteRecord(TxnState *txn, Record *record) {
     std::array<uint8_t, max_size()> keyData {};
     prepareKeyData(&record->key, keyData.data());
 
@@ -500,7 +500,7 @@ offset Tree::findOrConstructL1Item(const std::array<uint8_t, max_size()>& keyDat
 }
 
 offset Tree::recursive(TxnState* txn, uint32_t level, L0Item* l0Item, uint32_t* indexUpdate) {
-    
+
     int initial = 0;
     if (txn) {
         initial = txn->traversalTrace[level];

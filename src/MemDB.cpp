@@ -24,7 +24,7 @@ ErrCode MemDB::create(KeyType type, char *name) {
     if (this->tries.count(name) != 0) {
         return DB_EXISTS;
     }
-    auto new_tree = new Tree(type);
+    auto new_tree = new Tree(type, this);
     this->tries.insert(std::make_pair(name, new_tree));
 
     return SUCCESS;
@@ -67,22 +67,22 @@ ErrCode MemDB::closeIndex(IdxState *idxState) {
 
 ErrCode MemDB::deleteRecord(IdxState *idxState, TxnState *txn, Record *record) {
     auto tree = idxState->tree;
-    return tree->deleteRecord(this, txn, record);
+    return tree->deleteRecord(txn, record);
 }
 
 ErrCode MemDB::insertRecord(IdxState *idxState, TxnState *txn, Key *k, const char *payload) {
     auto tree = idxState->tree;
-    return tree->insertRecord(this, txn, k, payload);
+    return tree->insertRecord(txn, k, payload);
 }
 
 ErrCode MemDB::getNext(IdxState *idxState, TxnState *txn, Record *record) {
     auto tree = idxState->tree;
-    return tree->getNext(this, txn, record);
+    return tree->getNext(txn, record);
 }
 
 ErrCode MemDB::get(IdxState *idxState, TxnState *txn, Record *record) {
     auto tree = idxState->tree;
-    return tree->get(this, txn, record);
+    return tree->get(txn, record);
 }
 
 ErrCode MemDB::beginTransaction(TxnState **txn) {

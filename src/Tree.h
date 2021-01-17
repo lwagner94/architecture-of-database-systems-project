@@ -44,12 +44,12 @@ class Tree{
 public:
     KeyType keyType;
 
-    explicit Tree(KeyType keyType);
+    explicit Tree(KeyType keyType, MemDB* memDb);
 
-    ErrCode get(MemDB* db, TxnState *txn, Record *record);
-    ErrCode getNext(MemDB* db, TxnState *txn, Record *record);
-    ErrCode insertRecord(MemDB* db, TxnState *txn, Key *k, const char* payload);
-    ErrCode deleteRecord(MemDB* db, TxnState *txn, Record *record);
+    ErrCode get(TxnState *txn, Record *record);
+    ErrCode getNext(TxnState *txn, Record *record);
+    ErrCode insertRecord(TxnState *txn, Key *k, const char* payload);
+    ErrCode deleteRecord(TxnState *txn, Record *record);
 
     void commit(uint32_t transactionId);
     void abort(uint32_t transactionId);
@@ -59,6 +59,7 @@ private:
     offset findL1ItemWithSmallestKey();
     offset findL1Item(const uint8_t* data, TxnState* txn);
 
+    MemDB* memDb;
     std::vector<TransactionLogItem> transactionLogItems;
 
     std::mutex mutex;
@@ -89,9 +90,7 @@ private:
 
     bool isTransactionActive(uint32_t transactionID);
 
-    uint32_t getTransactionId(TxnState *txn, MemDB *db);
-
-    L0Item *getItem(L0Item *currentL0Item, const uint8_t index);
+    uint32_t getTransactionId(TxnState *txn);
 
     RecursiveDeleteResult recursiveDelete(uint32_t level, L0Item* l0Item, const uint8_t *keyData, const char* payload);
 };
