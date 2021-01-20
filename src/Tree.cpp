@@ -55,7 +55,7 @@ ErrCode Tree::get(TxnState *txn, Record *record) {
     for (auto l2Item = l1Item->items.begin(); l2Item != std::end(l1Item->items); l2Item++) {
 
         // TODO: Refactor!
-        if (((l2Item->writeTimestamp < transactionId) && !isTransactionActive(l2Item->writeTimestamp)) || l2Item->writeTimestamp == transactionId) {
+        if (((l2Item->timestamp < transactionId) && !isTransactionActive(l2Item->timestamp)) || l2Item->timestamp == transactionId) {
             strcpy(record->payload, l2Item->payload);
 
             if (txn) {
@@ -96,7 +96,7 @@ ErrCode Tree::getNext(TxnState *txn, Record *record) {
         }
         else if (txn->firstCall) {
             uint32_t _ = 0;
-            l1Offset = recursive(txn, 0, &accessL0Item(rootElementOffset), &_);
+            l1Offset = recursiveFindL1(txn, 0, &accessL0Item(rootElementOffset), &_);
             txn->firstCall = false;
         }
         else if (readPositions[txn->transactionId].hasMoreL2Items) {
@@ -104,7 +104,7 @@ ErrCode Tree::getNext(TxnState *txn, Record *record) {
         }
         else {
             uint32_t _ = 0;
-            l1Offset = recursive(txn, 0, &accessL0Item(rootElementOffset), &_);
+            l1Offset = recursiveFindL1(txn, 0, &accessL0Item(rootElementOffset), &_);
         }
 
         if (!isL1Node(l1Offset)) {
@@ -122,7 +122,7 @@ ErrCode Tree::getNext(TxnState *txn, Record *record) {
 
         for (; l2Item != l1Item->items.end(); l2Item++) {
             // TODO: Refactor!
-            if (((l2Item->writeTimestamp < transactionId) && !isTransactionActive(l2Item->writeTimestamp)) || l2Item->writeTimestamp == transactionId) {
+            if (((l2Item->timestamp < transactionId) && !isTransactionActive(l2Item->timestamp)) || l2Item->timestamp == transactionId) {
                 strcpy(record->payload, l2Item->payload);
                 record->key.type = keyType;
 
@@ -195,7 +195,7 @@ ErrCode Tree::insertRecord(TxnState *txn, Key *k, const char *payload) {
         }
     }
 
-    l1Item->items.emplace_back(L2Item (payload, transactionId, transactionId));
+    l1Item->items.emplace_back(L2Item (payload, transactionId));
 
     if (txn) {
         this->transactionLogItems.emplace_back(transactionId, l1Offset, payload, true);
@@ -499,7 +499,7 @@ offset Tree::findOrConstructL1Item(const std::array<uint8_t, max_size()>& keyDat
     return NO_CHILD;
 }
 
-offset Tree::recursive(TxnState* txn, uint32_t level, L0Item* l0Item, uint32_t* indexUpdate) {
+offset Tree::recursiveFindL1(TxnState* txn, uint32_t level, L0Item* l0Item, uint32_t* indexUpdate) {
 
     int initial = 0;
     if (txn) {
@@ -521,7 +521,7 @@ offset Tree::recursive(TxnState* txn, uint32_t level, L0Item* l0Item, uint32_t* 
             L0Item* next = &accessL0Item(l0Item->children[i]);
 
             uint32_t idx = i;
-            offset l1Item = recursive(txn, level + 1, next, &idx);
+            offset l1Item = recursiveFindL1(txn, level + 1, next, &idx);
 
             if (txn) {
                 txn->traversalTrace[level] = idx;

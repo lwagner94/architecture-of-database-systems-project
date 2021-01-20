@@ -4,8 +4,7 @@
 #include <sys/time.h>
 #include <pthread.h>
 
-#include "IX_Byte.h"
-#include "IXStruct.h"
+#include "server.h"
 
 typedef struct timeval timeval;
 

@@ -15,9 +15,7 @@ struct L1Item {
 
     }
 
-//    uint8_t* keyData;
     std::array<uint8_t, max_size()> keyData {};
-//    std::vector<L2Item> items;
     std::list<L2Item> items;
 };
 

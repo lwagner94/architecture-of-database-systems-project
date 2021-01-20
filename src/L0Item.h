@@ -16,6 +16,5 @@ struct L0Item {
     }
 
     std::array<offset, 16> children;
-//    offset l1Item;
 };
 

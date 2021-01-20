@@ -1,7 +1,3 @@
-#include <iostream>
-#include "server.h"
+#define CATCH_CONFIG_MAIN
+#include <catch_amalgamated.hpp>
 
-int main() {
-    std::cout << "Hello, World!" << std::endl;
-    return 0;
-}

@@ -14,7 +14,6 @@
 class MemDB {
 public:
     MemDB();
-
     ~MemDB();
     ErrCode create(KeyType type, char *name);
     ErrCode drop(char *name);
@@ -27,18 +26,11 @@ public:
     ErrCode getNext(IdxState *idxState, TxnState *txn, Record *record);
     ErrCode insertRecord(IdxState *idxState, TxnState *txn, Key *k, const char* payload);
     ErrCode deleteRecord(IdxState *idxState, TxnState *txn, Record *record);
-
     uint32_t getTransactionID();
 
-//    bool isTransactionActive(int transactionId);
-
 private:
-
-
     std::map<std::string, Tree*> tries;
     std::shared_mutex mtx;
-
-//    std::vector<int> transactionIds;
 
     uint32_t transactionIDCounter;
 };

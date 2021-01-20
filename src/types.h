@@ -78,7 +78,6 @@ class MemDB;
 class Tree;
 
 struct IdxState {
-    MemDB* memDbInstance;
     Tree* tree;
 };
 
@@ -90,5 +89,22 @@ struct TxnState {
     uint32_t transactionId;
     bool firstCall;
     std::array<uint8_t, max_levels()> traversalTrace;
+};
+
+enum class RecursiveDeleteResult {
+    ONE_DELETED,
+    ALL_DELETED,
+    ENTRY_NOT_FOUND,
+    KEY_NOT_FOUND
+};
+
+struct ReadPosition {
+    ReadPosition(): l1Offset(NO_CHILD), l2Iterator({}), hasMoreL2Items(false) {
+
+    }
+
+    offset l1Offset;
+    std::list<L2Item>::iterator l2Iterator;
+    bool hasMoreL2Items;
 };
 

@@ -5,7 +5,6 @@
 #include <algorithm>
 
 #include "MemDB.h"
-#include "types.h"
 
 MemDB::MemDB(): transactionIDCounter(0){
 
