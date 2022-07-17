@@ -1,3 +1,6 @@
+Implementation of an in-memory index data structure with transaction support.
+It was implemented as a part of the *Architecture of Database Systems* practical at Graz University of Technology.
+
 
 Requirements
 ------------
